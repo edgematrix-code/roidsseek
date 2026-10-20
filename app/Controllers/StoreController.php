@@ -42,7 +42,8 @@ class StoreController
         $reviews = Database::all(
             'SELECT r.*, p.name AS product_name, p.slug AS product_slug
              FROM reviews r JOIN products p ON p.id = r.product_id
-             WHERE r.status = "approved" ORDER BY r.created_at DESC LIMIT 8'
+             WHERE r.status = ? ORDER BY r.created_at DESC LIMIT 8',
+            ['approved']
         );
 
         View::render('pages/home', [
@@ -78,8 +79,9 @@ class StoreController
         }
 
         if ($filters['location'] !== null) {
-            $whereSql .= ' AND p.shipping_location IN (?, "both")';
+            $whereSql .= ' AND p.shipping_location IN (?, ?)';
             $paramList[] = $filters['location'];
+            $paramList[] = 'both';
         }
 
         if ($filters['max_price'] !== null) {
@@ -160,13 +162,13 @@ class StoreController
         );
 
         $reviews = Database::all(
-            'SELECT * FROM reviews WHERE product_id = ? AND status = "approved" ORDER BY created_at DESC LIMIT 20',
-            [$product['id']]
+            'SELECT * FROM reviews WHERE product_id = ? AND status = ? ORDER BY created_at DESC LIMIT 20',
+            [$product['id'], 'approved']
         );
 
         $rating = Database::one(
-            'SELECT AVG(rating) AS avg_rating, COUNT(*) AS total FROM reviews WHERE product_id = ? AND status = "approved"',
-            [$product['id']]
+            'SELECT AVG(rating) AS avg_rating, COUNT(*) AS total FROM reviews WHERE product_id = ? AND status = ?',
+            [$product['id'], 'approved']
         );
 
         $related = [];
@@ -331,8 +333,8 @@ class StoreController
 
         Database::insert(
             'INSERT INTO reviews (product_id, user_id, name, rating, title, body, status)
-             VALUES (?, ?, ?, ?, ?, ?, "pending")',
-            [$product['id'], user()['id'] ?? null, $name, $rating, $title, $body]
+             VALUES (?, ?, ?, ?, ?, ?, ?)',
+            [$product['id'], user()['id'] ?? null, $name, $rating, $title, $body, 'pending']
         );
 
         flash('success', 'Thanks! Your review will appear once it has been approved.');
@@ -434,8 +436,8 @@ class StoreController
                 return [
                     $slug === 'usa' ? 'USA Domestic Shipping' : 'International Shipping',
                     'Products shipped from our ' . ($slug === 'usa' ? 'US domestic' : 'international') . ' warehouse.',
-                    'p.is_active = 1 AND p.shipping_location IN (?, "both")',
-                    [$slug],
+                    'p.is_active = 1 AND p.shipping_location IN (?, ?)',
+                    [$slug, 'both'],
                     'shipping',
                     ['slug' => $slug],
                     ['shipping', $slug],
@@ -521,7 +523,7 @@ class StoreController
                     [$value],
                 ];
             case 'shipping':
-                return ['', 'p.shipping_location IN (?, "both")', [$value]];
+                return ['', 'p.shipping_location IN (?, ?)', [$value, 'both']];
             case 'sale':
                 return ['', 'p.old_price IS NOT NULL AND p.old_price > p.price', []];
             case 'search':

@@ -395,7 +395,8 @@ class AdminController
             'reviews' => Database::all(
                 'SELECT r.*, p.name AS product_name, p.slug AS product_slug
                  FROM reviews r JOIN products p ON p.id = r.product_id
-                 ORDER BY r.status = "pending" DESC, r.created_at DESC LIMIT 100'
+                 ORDER BY r.status = ? DESC, r.created_at DESC LIMIT 100',
+                ['pending']
             ),
         ], 'admin/layout');
     }
