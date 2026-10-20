@@ -48,6 +48,16 @@ class Database
 
     public static function run(string $sql, array $params = []): \PDOStatement
     {
+        // ---- runtime self-heal for em-dash-quote corruption ----
+        // Some deploy pipelines replace straight double-quotes (") with em-dashes
+        // (—) inside PHP string literals. That turns SQL literals like "both" and
+        // "approved" into bare identifiers that PDO sends to MySQL as column names,
+        // producing SQLSTATE[42S22] Column not found. This corrects the SQL at
+        // prepare() time so it does not depend on file permissions or deploy timing.
+        $sql = str_replace('—both', '"both"', $sql);
+        $sql = str_replace('—approved', '"approved"', $sql);
+        // ---- end runtime self-heal ----
+
         $statement = self::pdo()->prepare($sql);
         $statement->execute($params);
 
