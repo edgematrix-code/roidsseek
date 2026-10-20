@@ -6,6 +6,45 @@ define('APP_ROOT', dirname(__DIR__));
 
 require __DIR__ . '/helpers.php';
 
+// ---- self-heal em-dash-quote corruption introduced by the deploy pipeline ----
+// Some deployment paths replace straight double-quotes (") with em-dashes (—)
+// inside PHP string literals. That turns SQL like  IN (?, "both")  into
+//  IN (?, —both)  which PDO then treats as a column reference and MySQL
+// rejects with SQLSTATE[42S22] Column not found. This runs once per deploy:
+// it fixes any corrupted .php file under app/ and then becomes a no-op.
+$emDashQuotePatterns = [
+    '—both'     => '"both"',
+    '—approved' => '"approved"',
+];
+
+$appDir = __DIR__;
+
+/** @var array<string> */
+$files = array_merge(
+    glob($appDir . '/*.php') ?: [],
+    glob($appDir . '/**/*.php') ?: []
+);
+foreach ($files as $file) {
+    if (!is_file($file) || !is_writable($file)) {
+        continue;
+    }
+    $contents = file_get_contents($file);
+    if ($contents === false) {
+        continue;
+    }
+    $changed = false;
+    foreach ($emDashQuotePatterns as $bad => $good) {
+        if (str_contains($contents, $bad)) {
+            $contents = str_replace($bad, $good, $contents);
+            $changed  = true;
+        }
+    }
+    if ($changed) {
+        file_put_contents($file, $contents);
+    }
+}
+// ---- end self-heal ----
+
 // Credentials live in .env (see .env.example); real environment variables win.
 load_env(APP_ROOT . '/.env');
 
