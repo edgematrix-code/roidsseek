@@ -1,0 +1,12 @@
+# Local credentials and machine-specific configuration
+.env
+.env.*
+!.env.example
+config/local.php
+
+# Editor / OS noise
+.idea/
+.vscode/
+*.log
+.DS_Store
+Thumbs.db

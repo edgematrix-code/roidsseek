@@ -1,0 +1,104 @@
+{
+ "categories": [
+  {
+   "slug": "best-deals",
+   "name": "Best Deals"
+  },
+  {
+   "slug": "bulk-discounts",
+   "name": "Bulk Discounts"
+  },
+  {
+   "slug": "peptides-sarms",
+   "name": "Peptides and SARMS"
+  },
+  {
+   "slug": "oral-steroids",
+   "name": "Oral Steroids"
+  },
+  {
+   "slug": "injectable-steroids",
+   "name": "Injectable Steroids"
+  },
+  {
+   "slug": "pct",
+   "name": "PCT"
+  },
+  {
+   "slug": "hgh-and-insulin",
+   "name": "HGH and Insulin"
+  },
+  {
+   "slug": "mens-health",
+   "name": "Men's Health"
+  },
+  {
+   "slug": "weight-loss",
+   "name": "Weight Loss"
+  },
+  {
+   "slug": "skin-care",
+   "name": "Skin Care"
+  },
+  {
+   "slug": "general-health",
+   "name": "General Health Products"
+  }
+ ],
+ "brands": [
+  {
+   "slug": "kalpa-pharmaceuticals",
+   "name": "Kalpa Pharmaceuticals"
+  },
+  {
+   "slug": "dragon-pharma",
+   "name": "Dragon Pharma"
+  },
+  {
+   "slug": "axiolabs",
+   "name": "Axiolabs"
+  },
+  {
+   "slug": "british-dragon",
+   "name": "British Dragon"
+  },
+  {
+   "slug": "stealth-labs",
+   "name": "Stealth Labs"
+  },
+  {
+   "slug": "gen-shi-labs",
+   "name": "Gen-Shi Labs"
+  },
+  {
+   "slug": "generic-asia",
+   "name": "Generic Asia"
+  }
+ ],
+ "goals": [
+  {
+   "slug": "bulking-supplements",
+   "name": "Bulking"
+  },
+  {
+   "slug": "cutting-supplements",
+   "name": "Cutting"
+  },
+  {
+   "slug": "recomping-supplements",
+   "name": "Recomping"
+  },
+  {
+   "slug": "strength-supplements",
+   "name": "Strength"
+  },
+  {
+   "slug": "recovery-supplements",
+   "name": "Recovery"
+  },
+  {
+   "slug": "aesthetics-supplements",
+   "name": "Aesthetics"
+  }
+ ]
+}
