@@ -12,36 +12,21 @@ require __DIR__ . '/helpers.php';
 //  IN (?, —both)  which PDO then treats as a column reference and MySQL
 // rejects with SQLSTATE[42S22] Column not found. This runs once per deploy:
 // it fixes any corrupted .php file under app/ and then becomes a no-op.
-$emDashQuotePatterns = [
-    '—both'     => '"both"',
-    '—approved' => '"approved"',
-];
-
+$emDashQuotePatterns = ['—both' => '"both"', '—approved' => '"approved"'];
 $appDir = __DIR__;
-
-/** @var array<string> */
-$files = array_merge(
-    glob($appDir . '/*.php') ?: [],
-    glob($appDir . '/**/*.php') ?: []
-);
+$files = array_merge(glob($appDir . '/*.php') ?: [], glob($appDir . '/**/*.php') ?: []);
 foreach ($files as $file) {
-    if (!is_file($file) || !is_writable($file)) {
-        continue;
-    }
+    if (!is_file($file) || !is_writable($file)) { continue; }
     $contents = file_get_contents($file);
-    if ($contents === false) {
-        continue;
-    }
+    if ($contents === false) { continue; }
     $changed = false;
     foreach ($emDashQuotePatterns as $bad => $good) {
         if (str_contains($contents, $bad)) {
             $contents = str_replace($bad, $good, $contents);
-            $changed  = true;
+            $changed = true;
         }
     }
-    if ($changed) {
-        file_put_contents($file, $contents);
-    }
+    if ($changed) { file_put_contents($file, $contents); }
 }
 // ---- end self-heal ----
 
@@ -50,15 +35,10 @@ load_env(APP_ROOT . '/.env');
 
 spl_autoload_register(static function (string $class): void {
     $prefix = 'App\\';
-    if (strncmp($class, $prefix, strlen($prefix)) !== 0) {
-        return;
-    }
-
+    if (strncmp($class, $prefix, strlen($prefix)) !== 0) { return; }
     $relative = substr($class, strlen($prefix));
     $path = __DIR__ . '/' . str_replace('\\', '/', $relative) . '.php';
-    if (is_file($path)) {
-        require $path;
-    }
+    if (is_file($path)) { require $path; }
 });
 
 $debug = (bool) config('app.debug', false);
