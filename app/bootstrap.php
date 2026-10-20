@@ -7,12 +7,15 @@ define('APP_ROOT', dirname(__DIR__));
 require __DIR__ . '/helpers.php';
 
 // ---- self-heal em-dash-quote corruption introduced by the deploy pipeline ----
-// Some deployment paths replace straight double-quotes (") with em-dashes (—)
+// Some deployment paths replace straight double-quotes (") with U+2014 (em dash)
 // inside PHP string literals. That turns SQL like  IN (?, "both")  into
-//  IN (?, —both)  which PDO then treats as a column reference and MySQL
+//  IN (?, U+2014both)  which PDO then treats as a column reference and MySQL
 // rejects with SQLSTATE[42S22] Column not found. This runs once per deploy:
 // it fixes any corrupted .php file under app/ and then becomes a no-op.
-$emDashQuotePatterns = ['—both' => '"both"', '—approved' => '"approved"'];
+// The em-dash is built from chr() calls so the source file contains no
+// non-ASCII bytes that a deploy pipeline might mangle.
+$emDash = chr(0xE2) . chr(0x80) . chr(0x94);
+$emDashQuotePatterns = [$emDash . 'both' => '"both"', $emDash . 'approved' => '"approved"'];
 $appDir = __DIR__;
 $files = array_merge(glob($appDir . '/*.php') ?: [], glob($appDir . '/**/*.php') ?: []);
 foreach ($files as $file) {
