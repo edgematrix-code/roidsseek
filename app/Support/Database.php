@@ -52,9 +52,21 @@ class Database
         // The deploy pipeline replaces " with U+2014 (em dash) in PHP string literals.
         // The em-dash is built from chr() calls so the source file contains no
         // non-ASCII bytes that a deploy pipeline might mangle.
-        $emDash = chr(0xE2) . chr(0x80) . chr(0x94);
-        $sql = str_replace($emDash . 'both', '"both"', $sql);
-        $sql = str_replace($emDash . 'approved', '"approved"', $sql);
+        // Try multiple possible dash characters the pipeline might insert.
+        // U+2014 = em dash, U+2013 = en dash, U+2012 = figure dash.
+        $dashes = [
+            chr(0xE2) . chr(0x80) . chr(0x94),  // U+2014 em dash
+            chr(0xE2) . chr(0x80) . chr(0x93),  // U+2013 en dash
+            chr(0xE2) . chr(0x80) . chr(0x92),  // U+2012 figure dash
+        ];
+        foreach ($dashes as $dash) {
+            $sql = str_replace($dash . 'both', '"both"', $sql);
+            $sql = str_replace($dash . 'approved', '"approved"', $sql);
+            $sql = str_replace($dash . 'usa', '"usa"', $sql);
+            $sql = str_replace($dash . 'international', '"international"', $sql);
+            $sql = str_replace($dash . 'pending', '"pending"', $sql);
+            $sql = str_replace($dash . 'rejected', '"rejected"', $sql);
+        }
 
         $statement = self::pdo()->prepare($sql);
         $statement->execute($params);
