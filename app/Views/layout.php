@@ -15,6 +15,9 @@ $isHome = ($_GET['r'] ?? '') === '';
     <meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
     <title><?= e($title ?? 'RoidsSeek') ?></title>
     <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+    <link rel="icon" href="assets/img/favicon.ico" sizes="any">
+    <link rel="icon" type="image/png" href="assets/img/favicon-32.png" sizes="32x32">
+    <link rel="apple-touch-icon" href="assets/img/apple-touch-icon.png">
     <meta name="distribution" content="global">
     <meta name="classification" content="Shopping/Health/Fitness/Medicine/e-Commerce">
     <meta name="keywords" content="buy steroids online, steroids for sale, steroids online, anabolic steroids for sale, buy steroids">
