@@ -91,21 +91,22 @@
                     </div>
                 </div>
 
-                <div class="checkout-panel">
+                <div class="checkout-panel checkout-panel--btc">
                     <h2>Payment method</h2>
-                    <label class="payment-option">
-                        <input type="radio" name="payment_method" value="crypto" <?= old('payment_method', 'crypto') === 'crypto' ? 'checked' : '' ?>>
-                        <span><strong>Cryptocurrency</strong><small>Bitcoin, Ethereum, USDT - 10% discount applied manually after payment.</small></span>
-                    </label>
-                    <label class="payment-option">
-                        <input type="radio" name="payment_method" value="bank_transfer" <?= old('payment_method') === 'bank_transfer' ? 'checked' : '' ?>>
-                        <span><strong>Bank transfer</strong><small>Instructions are emailed once the order is placed.</small></span>
-                    </label>
-                    <label class="payment-option">
-                        <input type="radio" name="payment_method" value="cash" <?= old('payment_method') === 'cash' ? 'checked' : '' ?>>
-                        <span><strong>Cash by mail</strong><small>Available for USA domestic orders only.</small></span>
-                    </label>
+                    <input type="hidden" name="payment_method" value="bitcoin">
+                    <div class="payment-option payment-option--selected">
+                        <span class="btc-mark" aria-hidden="true">&#8383;</span>
+                        <span>
+                            <strong>Bitcoin (BTC) only</strong>
+                            <small>The exact amount and receive address are shown on the confirmation page after you place the order. Send only Bitcoin to that address.</small>
+                        </span>
+                        <span class="payment-check" aria-hidden="true">&#10003;</span>
+                    </div>
                     <?php if (isset($errors['payment_method'])): ?><div class="field-error"><?= e($errors['payment_method']) ?></div><?php endif; ?>
+                    <p class="small muted mt-2">
+                        Orders are marked paid after the configured number of network confirmations.
+                        Keep your transaction ID for support.
+                    </p>
                 </div>
             </div>
 

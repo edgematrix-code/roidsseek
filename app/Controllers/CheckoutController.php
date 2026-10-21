@@ -52,7 +52,10 @@ class CheckoutController
             'state' => trim((string) input('shipping_state', '')),
             'postal' => trim((string) input('shipping_postal', '')),
             'country' => trim((string) input('shipping_country', '')),
-            'payment' => (string) input('payment_method', 'bank_transfer'),
+            // Bitcoin is the only method offered. Legacy values are accepted
+            // so in-flight forms from before the switch still complete, but the
+            // order is always recorded as Bitcoin.
+            'payment' => 'bitcoin',
             'notes' => trim((string) input('notes', '')),
         ];
 
@@ -69,8 +72,8 @@ class CheckoutController
         if ($data['country'] === '') {
             $errors['shipping_country'] = 'Enter a country.';
         }
-        if (!in_array($data['payment'], ['bank_transfer', 'crypto', 'cash'], true)) {
-            $errors['payment_method'] = 'Choose a payment method.';
+        if (!in_array((string) input('payment_method', 'bitcoin'), ['bitcoin', 'crypto', 'bank_transfer', 'cash'], true)) {
+            $errors['payment_method'] = 'Bitcoin is the only available payment method.';
         }
 
         if ($errors !== []) {

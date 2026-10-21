@@ -17,6 +17,16 @@ $config = [
         'shipping_flat_rate' => (float) env('SHIPPING_FLAT_RATE', 25.00),
         'debug' => filter_var(env('APP_DEBUG', 'false'), FILTER_VALIDATE_BOOL),
     ],
+    // Bitcoin is the only payment method. The address is a public receive
+    // address; a private key or seed phrase must never be stored here.
+    'payments' => [
+        'btc' => [
+            'address' => trim((string) env('BTC_ADDRESS', '')),
+            'label' => (string) env('BTC_LABEL', ''),
+            'confirmations' => max(1, (int) env('BTC_CONFIRMATIONS', 2)),
+            'usd_rate' => (float) env('BTC_USD_RATE', 0),
+        ],
+    ],
     'db' => [
         'host' => env('DB_HOST', '127.0.0.1'),
         'port' => (string) env('DB_PORT', '3306'),
