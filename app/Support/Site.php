@@ -232,7 +232,7 @@ final class Site
             return ['account/order', ['number' => $segments[2]]];
         }
 
-        $allowed = ['search', 'sale', 'faq', 'articles', 'events', 'contact', 'cart',
+        $allowed = ['search', 'sale', 'faq', 'articles', 'events', 'contact', 'location', 'cart',
             'checkout', 'login', 'register', 'logout', 'forgot', 'reset', 'account',
             'newsletter', 'review', 'admin'];
         if (!in_array($first, $allowed, true)) {

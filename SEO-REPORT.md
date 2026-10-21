@@ -101,6 +101,9 @@ static files.
 - Category/listing: intro, factual SEO block below the grid, breadcrumbs,
   crawlable pagination.
 - Internal links: footer pages, categories in nav, related products, guides.
+- Local SEO: `/location` exists only when `SITE_HAS_PHYSICAL_LOCATION=true`
+  (404 otherwise), is linked in the footer and added to `sitemap-static.xml`;
+  the `Pharmacy` schema still requires a full address, phone and hours.
 - No auto-generated city/drug doorway pages.
 
 ### Payment change requested during the work
@@ -211,7 +214,7 @@ and medicines <https://support.google.com/adspolicy/answer/176031>.
 **Modified:** `app/helpers.php`, `app/bootstrap.php`, `app/Support/Nav.php`,
 `app/Controllers/StoreController.php`, `app/Controllers/CheckoutController.php`,
 `app/Controllers/AdminController.php`, `app/Controllers/AdminContentController.php`,
-`app/Views/layout.php`, `app/Views/pages/{listing,product,article,page,contact,404,checkout,order}.php`,
+`app/Views/layout.php`, `app/Views/pages/{listing,product,article,page,contact,location,404,checkout,order}.php`,
 `app/Views/partials/{footer,product-card}.php`,
 `app/Views/admin/product-form.php`, `config/config.php`, `database/schema.sql`,
 `index.php`, `router.php`, `.htaccess`, `.env.example`, `assets/css/site.css`.

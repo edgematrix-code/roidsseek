@@ -160,6 +160,10 @@ try {
             $store->contact();
             break;
 
+        case 'location':
+            $store->location();
+            break;
+
         case 'newsletter':
             $store->newsletter();
             break;

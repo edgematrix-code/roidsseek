@@ -97,7 +97,7 @@ cover thin copy and missing optional identifiers.
 
 | Route | Indexed | How |
 |---|---|---|
-| Home, `/products`, categories, brands, conditions, products, articles, info pages | Yes | `index,follow` + self canonical |
+| Home, `/products`, categories, brands, conditions, products, articles, info pages, `/location` (when enabled) | Yes | `index,follow` + self canonical |
 | Pagination (`?page=N`) | Yes | Self canonical, title gets ` - Page N` |
 | Filters, sorting (`brand`, `substance`, `location`, `max_price`, `stock`, `sort`, `keyword`) | No | `noindex,follow`, canonical to the clean listing |
 | Internal search | No | `noindex,follow` |

@@ -291,6 +291,9 @@ class SeoController
     private function staticUrls(): array
     {
         $routes = ['', 'all', 'sale', 'articles', 'faq', 'events', 'contact'];
+        if ((bool) Site::get('hasPhysicalLocation', false)) {
+            $routes[] = 'location';
+        }
         $urls = [];
         foreach ($routes as $route) {
             $urls[] = '  <url><loc>' . $this->xml(Site::absoluteRoute($route)) . '</loc></url>';

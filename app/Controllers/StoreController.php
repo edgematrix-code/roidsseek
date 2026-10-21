@@ -543,6 +543,37 @@ class StoreController
         redirect('product', ['slug' => $slug]);
     }
 
+    /** Physical location page; only exists when a staffed address is published. */
+    public function location(): void
+    {
+        if (!(bool) Site::get('hasPhysicalLocation', false)) {
+            $this->notFound();
+            return;
+        }
+
+        $address = (array) Site::get('address', []);
+        $description = trim(implode(', ', array_filter([
+            (string) ($address['street'] ?? ''),
+            (string) ($address['city'] ?? ''),
+            (string) ($address['country'] ?? ''),
+        ])));
+
+        View::render('pages/location', [
+            'seo' => [
+                'title' => Seo::withStore('Visit us'),
+                'description' => $description !== ''
+                    ? 'Location, opening hours and contact details: ' . $description . '.'
+                    : 'Location, opening hours and contact details.',
+                'route' => 'location',
+                'jsonLd' => [JsonLd::breadcrumbs([
+                    ['name' => 'Home', 'url' => Site::absoluteRoute('')],
+                    ['name' => 'Location', 'url' => Site::absoluteRoute('location')],
+                ])],
+            ],
+            'address' => $address,
+        ]);
+    }
+
     public function notFound(): void
     {
         http_response_code(404);

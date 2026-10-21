@@ -13,6 +13,9 @@
                         <a href="<?= e(url('articles')) ?>">Guides</a>
                         <a href="<?= e(url('faq')) ?>">FAQ</a>
                         <a href="<?= e(url('contact')) ?>">Contact</a>
+                        <?php if (\App\Support\Site::get('hasPhysicalLocation')): ?>
+                            <a href="<?= e(url('location')) ?>">Visit us</a>
+                        <?php endif; ?>
                         <?php foreach (\App\Support\Nav::pages() as $footerPage): ?>
                             <a href="<?= e(url('page', ['slug' => $footerPage['slug']])) ?>"><?= e($footerPage['title']) ?></a>
                         <?php endforeach; ?>
