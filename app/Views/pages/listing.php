@@ -133,7 +133,7 @@ $hasFilters = $filters['brand'] !== [] || $filters['substance'] !== [] || $filte
                     <span class="collapse-icons facet-title collapse-opened">Categories</span>
                     <ul class="category-sub-menu categories-list" style="display:block;">
                         <li>
-                            <a class="link <?= $type === 'all' && $route === 'products' ? 'active' : '' ?>" href="<?= e(url('all')) ?>">
+                            <a class="link <?= $type === 'all' && $route === 'all' ? 'active' : '' ?>" href="<?= e(url('all')) ?>">
                                 <span>All Products</span><span class="count"><?= array_sum(array_map(static fn ($c) => (int) $c['product_count'], $allCategories)) ?></span>
                             </a>
                         </li>
@@ -293,6 +293,29 @@ $hasFilters = $filters['brand'] !== [] || $filters['substance'] !== [] || $filte
                 <?php endif; ?>
             <?php endif; ?>
         </div>
+    </div>
+</div>
+<div style="height:24px;"></div>
+<div class="container">
+    <div class="kit-prose info-content listing-seo-block">
+        <h2><?= e($heading) ?></h2>
+        <p>
+            <?= (int) $pager['total'] ?> product<?= (int) $pager['total'] === 1 ? '' : 's' ?>
+            <?= $pager['pages'] > 1 ? 'across ' . (int) $pager['pages'] . ' pages' : '' ?>
+            listed under <?= e($heading) ?>. Every product page shows the recorded strength,
+            pack size, stock status and current price.
+        </p>
+        <p>
+            Medical information and usage guidance are published only after review by a
+            licensed pharmacist. Nothing on this page is a substitute for advice from a
+            qualified healthcare professional.
+        </p>
+        <p>
+            <a href="<?= e(url('all')) ?>">Browse all products</a>
+            <?php foreach (array_slice($allCategories, 0, 6) as $category): ?>
+                &middot; <a href="<?= e(url('category', ['slug' => $category['slug']])) ?>"><?= e($category['name']) ?></a>
+            <?php endforeach; ?>
+        </p>
     </div>
 </div>
 <div style="height:40px;"></div>

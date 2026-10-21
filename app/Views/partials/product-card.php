@@ -29,7 +29,8 @@ $oldPrice = old_price_active($product) ? (float) $product['old_price'] : null;
             <a class="img" href="<?= e($link) ?>">
                 <img decoding="async" loading="lazy" class="img-fluid" width="256" height="256"
                      src="<?= e(image_url($product['image'] ?? null)) ?>"
-                     alt="<?= e($product['name']) ?>" title="<?= e($product['name']) ?>">
+                     alt="<?= e(trim((string) ($product['image_alt'] ?? '')) !== '' ? (string) $product['image_alt'] : (string) $product['name']) ?>"
+                     title="<?= e($product['name']) ?>">
             </a>
             <div class="info-desc">
                 <div class="info-desc-left">

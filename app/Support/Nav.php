@@ -29,6 +29,12 @@ class Nav
         return self::$cache['goals'] ??= Database::all('SELECT * FROM goals ORDER BY name');
     }
 
+    /** Published informational pages, used for the footer trust links. */
+    public static function pages(): array
+    {
+        return self::$cache['pages'] ??= Database::all('SELECT slug, title FROM pages ORDER BY title');
+    }
+
     public static function count(string $table, string $where = '1'): int
     {
         return (int) Database::value("SELECT COUNT(*) FROM $table WHERE $where");

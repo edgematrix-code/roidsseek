@@ -5,7 +5,10 @@ declare(strict_types=1);
 namespace App\Controllers;
 
 use App\Support\Database;
+use App\Support\JsonLd;
 use App\Support\Nav;
+use App\Support\Seo;
+use App\Support\Site;
 use App\Support\View;
 
 class StoreController
@@ -18,7 +21,7 @@ class StoreController
         $featured = Database::all(
             'SELECT p.*, b.name AS brand_name FROM products p
              LEFT JOIN brands b ON b.id = p.brand_id
-             WHERE p.is_active = 1 AND p.is_featured = 1
+             WHERE p.is_active = 1 AND p.is_featured = 1 AND p.is_restricted = 0 AND p.discontinued = 0
              ORDER BY p.old_price IS NULL, p.price ASC LIMIT 8'
         );
 
@@ -26,14 +29,16 @@ class StoreController
             $featured = Database::all(
                 'SELECT p.*, b.name AS brand_name FROM products p
                  LEFT JOIN brands b ON b.id = p.brand_id
-                 WHERE p.is_active = 1 ORDER BY p.id LIMIT 8'
+                 WHERE p.is_active = 1 AND p.is_restricted = 0 AND p.discontinued = 0
+                 ORDER BY p.id LIMIT 8'
             );
         }
 
         $deals = Database::all(
             'SELECT p.*, b.name AS brand_name FROM products p
              LEFT JOIN brands b ON b.id = p.brand_id
-             WHERE p.is_active = 1 AND p.old_price IS NOT NULL AND p.old_price > p.price
+             WHERE p.is_active = 1 AND p.is_restricted = 0 AND p.discontinued = 0
+               AND p.old_price IS NOT NULL AND p.old_price > p.price
              ORDER BY (p.old_price - p.price) DESC LIMIT 8'
         );
 
@@ -42,12 +47,25 @@ class StoreController
         $reviews = Database::all(
             'SELECT r.*, p.name AS product_name, p.slug AS product_slug
              FROM reviews r JOIN products p ON p.id = r.product_id
-             WHERE r.status = ? ORDER BY r.created_at DESC LIMIT 8',
+             WHERE r.status = ? AND p.is_restricted = 0 ORDER BY r.created_at DESC LIMIT 8',
             ['approved']
         );
 
+        $store = Site::name();
+        $description = Seo::clip((string) Site::get('defaultMetaDescription', ''));
+        if ($description === '') {
+            $description = $store !== ''
+                ? 'Browse the ' . $store . ' catalogue, current offers and product availability.'
+                : 'Browse the catalogue, current offers and product availability.';
+        }
+
         View::render('pages/home', [
-            'title' => 'Buy Steroids Online | Anabolic Steroids for Sale - RoidsSeek',
+            'seo' => [
+                'title' => '', // Seo::page() composes store name + tagline.
+                'description' => $description,
+                'route' => '',
+                'params' => [],
+            ],
             'featured' => $featured,
             'deals' => $deals,
             'articles' => $articles,
@@ -60,7 +78,7 @@ class StoreController
     /** Product listing for categories, brands, goals, shipping and search. */
     public function listing(string $type, ?string $slug = null): void
     {
-        [$title, $description, $where, $params, $route, $routeParams, $facetScope] = $this->resolveScope($type, $slug);
+        [$title, $description, $where, $params, $route, $routeParams, $facetScope, $row] = $this->resolveScope($type, $slug);
 
         $filters = $this->filters();
         $whereSql = $where;
@@ -119,8 +137,40 @@ class StoreController
             $paramList
         );
 
+        $faceted = $filters['brand'] !== [] || $filters['substance'] !== [] || $filters['location'] !== null
+            || $filters['max_price'] !== null || $filters['stock'] !== null || $filters['sort'] !== 'featured';
+
+        $canonical = Seo::canonicalFor($route, $routeParams, $faceted ? 0 : $page);
+
+        $metaTitle = trim((string) ($row['meta_title'] ?? ''));
+        $metaDescription = trim((string) ($row['meta_description'] ?? ''));
+        if ($metaTitle === '') {
+            $metaTitle = Seo::listingTitle($title, $type === 'goal' ? 'goal' : 'category');
+        }
+        if ($metaDescription === '') {
+            $metaDescription = $description !== ''
+                ? $description
+                : $total . ' products in ' . $title . '.';
+        }
+
+        $crumbs = [['name' => 'Home', 'url' => Site::absoluteRoute('')]];
+        if ($type === 'category') {
+            $crumbs[] = ['name' => $title, 'url' => Site::absoluteRoute('category', ['slug' => (string) ($row['slug'] ?? '')])];
+        }
+
         View::render('pages/listing', [
-            'title' => $title . ' - RoidsSeek',
+            'seo' => [
+                'title' => $metaTitle,
+                'description' => $metaDescription,
+                'route' => $route,
+                'params' => $routeParams,
+                'canonical' => $canonical,
+                'page' => $page,
+                'jsonLd' => [
+                    JsonLd::collection($title, $canonical, $products, $page),
+                    JsonLd::breadcrumbs($crumbs),
+                ],
+            ],
             'heading' => $title,
             'description' => $description,
             'products' => $products,
@@ -132,6 +182,7 @@ class StoreController
             'substances' => $this->facetSubstances($facetScope[0], $facetScope[1]),
             'type' => $type,
             'sale' => $type === 'sale',
+            'total' => $total,
         ]);
     }
 
@@ -156,6 +207,37 @@ class StoreController
             [$product['id']]
         );
 
+        if (!empty($product['discontinued'])) {
+            $categoryIds = array_map('intval', array_column($categories, 'id'));
+            if ($categoryIds !== []) {
+                $marks = implode(',', array_fill(0, count($categoryIds), '?'));
+                $replacement = Database::one(
+                    "SELECT p.slug FROM products p
+                     JOIN product_category pc ON pc.product_id = p.id
+                     WHERE pc.category_id IN ($marks) AND p.id <> ?
+                       AND p.is_active = 1 AND p.is_restricted = 0 AND p.discontinued = 0
+                     ORDER BY (p.substance <=> ?) DESC, (p.brand_id <=> ?) DESC, p.id ASC
+                     LIMIT 1",
+                    [...$categoryIds, (int) $product['id'], $product['substance'], $product['brand_id']]
+                );
+                if ($replacement !== null) {
+                    redirect_to(Site::absoluteRoute('product', ['slug' => (string) $replacement['slug']]), 301);
+                }
+                redirect_to(Site::absoluteRoute('category', ['slug' => (string) $categories[0]['slug']]), 301);
+            }
+
+            http_response_code(410);
+            View::render('pages/404', [
+                'seo' => [
+                    'title' => 'Product no longer available',
+                    'robots' => 'noindex,nofollow',
+                    'route' => 'product',
+                    'status' => 410,
+                ],
+            ]);
+            return;
+        }
+
         $goals = Database::all(
             'SELECT g.* FROM goals g JOIN product_goal pg ON pg.goal_id = g.id WHERE pg.product_id = ?',
             [$product['id']]
@@ -178,13 +260,60 @@ class StoreController
                  LEFT JOIN brands b ON b.id = p.brand_id
                  JOIN product_category pc ON pc.product_id = p.id
                  WHERE pc.category_id = ? AND p.id <> ? AND p.is_active = 1
+                   AND p.is_restricted = 0 AND p.discontinued = 0
                  ORDER BY RAND() LIMIT 4',
                 [$categories[0]['id'], $product['id']]
             );
         }
 
+        $restricted = !empty($product['is_restricted']);
+        $inStock = (int) $product['stock'] > 0;
+        $currency = Site::currency();
+
+        $crumbs = [['name' => 'Home', 'url' => Site::absoluteRoute('')]];
+        if ($categories !== []) {
+            $crumbs[] = [
+                'name' => (string) $categories[0]['name'],
+                'url' => Site::absoluteRoute('category', ['slug' => (string) $categories[0]['slug']]),
+            ];
+        }
+        $crumbs[] = [
+            'name' => (string) $product['name'],
+            'url' => Site::absoluteRoute('product', ['slug' => (string) $product['slug']]),
+        ];
+
+        $metaTitle = trim((string) ($product['meta_title'] ?? ''));
+        if ($metaTitle === '') {
+            $metaTitle = Seo::productTitle($product, $restricted);
+        }
+        $metaDescription = trim((string) ($product['meta_description'] ?? ''));
+        if ($metaDescription === '') {
+            $metaDescription = trim((string) ($product['short_description'] ?: $product['description']));
+        }
+
+        $productSchema = JsonLd::product($product, $categories);
+
         View::render('pages/product', [
-            'title' => $product['name'] . ' - RoidsSeek',
+            'seo' => [
+                'title' => $metaTitle,
+                'description' => Seo::clip($metaDescription),
+                'route' => 'product',
+                'params' => ['slug' => (string) $product['slug']],
+                'type' => 'product',
+                'image' => (string) ($product['image'] ?? ''),
+                'robots' => $restricted
+                    ? 'noindex,follow'
+                    : Seo::robotsFor('product'),
+                'product' => [
+                    'price' => number_format((float) $product['price'], 2, '.', ''),
+                    'currency' => $currency,
+                    'availability' => $inStock ? 'in stock' : 'out of stock',
+                ],
+                'jsonLd' => array_values(array_filter([
+                    $productSchema,
+                    JsonLd::breadcrumbs($crumbs),
+                ])),
+            ],
             'product' => $product,
             'categories' => $categories,
             'goals' => $goals,
@@ -196,16 +325,37 @@ class StoreController
 
     public function faq(): void
     {
+        $faqs = Database::all('SELECT * FROM faqs ORDER BY sort_order, id');
+        $description = $faqs !== []
+            ? 'Answers to common questions about ordering, shipping, payment and prescriptions.'
+            : '';
+
         View::render('pages/faq', [
-            'title' => 'FAQ - RoidsSeek',
-            'faqs' => Database::all('SELECT * FROM faqs ORDER BY sort_order, id'),
+            'seo' => [
+                'title' => Seo::withStore('Frequently asked questions'),
+                'description' => $description,
+                'route' => 'faq',
+                'jsonLd' => [JsonLd::breadcrumbs([
+                    ['name' => 'Home', 'url' => Site::absoluteRoute('')],
+                    ['name' => 'FAQ', 'url' => Site::absoluteRoute('faq')],
+                ])],
+            ],
+            'faqs' => $faqs,
         ]);
     }
 
     public function articles(): void
     {
         View::render('pages/articles', [
-            'title' => 'Articles - RoidsSeek',
+            'seo' => [
+                'title' => Seo::withStore('Guides and articles'),
+                'description' => 'Guides and articles from the ' . (Site::name() !== '' ? Site::name() : 'store') . ' team.',
+                'route' => 'articles',
+                'jsonLd' => [JsonLd::breadcrumbs([
+                    ['name' => 'Home', 'url' => Site::absoluteRoute('')],
+                    ['name' => 'Articles', 'url' => Site::absoluteRoute('articles')],
+                ])],
+            ],
             'articles' => Database::all('SELECT * FROM articles WHERE is_published = 1 ORDER BY published_at DESC'),
         ]);
     }
@@ -218,8 +368,27 @@ class StoreController
             return;
         }
 
+        $metaTitle = trim((string) ($article['meta_title'] ?? ''));
+        $metaDescription = trim((string) ($article['meta_description'] ?? ''));
+        $url = Site::absoluteRoute('article', ['slug' => (string) $article['slug']]);
+
         View::render('pages/article', [
-            'title' => $article['title'] . ' - RoidsSeek',
+            'seo' => [
+                'title' => $metaTitle !== '' ? $metaTitle : Seo::withStore((string) $article['title']),
+                'description' => $metaDescription !== '' ? $metaDescription : (string) ($article['excerpt'] ?? ''),
+                'route' => 'article',
+                'params' => ['slug' => (string) $article['slug']],
+                'type' => 'article',
+                'image' => (string) ($article['image'] ?? ''),
+                'jsonLd' => [
+                    JsonLd::article($article),
+                    JsonLd::breadcrumbs([
+                        ['name' => 'Home', 'url' => Site::absoluteRoute('')],
+                        ['name' => 'Articles', 'url' => Site::absoluteRoute('articles')],
+                        ['name' => (string) $article['title'], 'url' => $url],
+                    ]),
+                ],
+            ],
             'article' => $article,
             'more' => Database::all(
                 'SELECT * FROM articles WHERE is_published = 1 AND id <> ? ORDER BY published_at DESC LIMIT 3',
@@ -231,7 +400,14 @@ class StoreController
     public function events(): void
     {
         View::render('pages/events', [
-            'title' => 'Events - RoidsSeek',
+            'seo' => [
+                'title' => Seo::withStore('News and events'),
+                'route' => 'events',
+                'jsonLd' => [JsonLd::breadcrumbs([
+                    ['name' => 'Home', 'url' => Site::absoluteRoute('')],
+                    ['name' => 'Events', 'url' => Site::absoluteRoute('events')],
+                ])],
+            ],
             'events' => Database::all('SELECT * FROM events ORDER BY published_at DESC'),
         ]);
     }
@@ -244,8 +420,26 @@ class StoreController
             return;
         }
 
+        $metaTitle = trim((string) ($page['meta_title'] ?? ''));
+        $metaDescription = trim((string) ($page['meta_description'] ?? ''));
+        if ($metaDescription === '') {
+            $metaDescription = Seo::clip(strip_tags((string) ($page['content'] ?? '')));
+        }
+
         View::render('pages/page', [
-            'title' => $page['title'] . ' - RoidsSeek',
+            'seo' => [
+                'title' => $metaTitle !== '' ? $metaTitle : Seo::withStore((string) $page['title']),
+                'description' => $metaDescription,
+                'route' => 'page',
+                'params' => ['slug' => (string) $page['slug']],
+                'robots' => !empty($page['noindex'])
+                    ? 'noindex,follow'
+                    : Seo::robotsFor('page'),
+                'jsonLd' => [JsonLd::breadcrumbs([
+                    ['name' => 'Home', 'url' => Site::absoluteRoute('')],
+                    ['name' => (string) $page['title'], 'url' => Site::absoluteRoute('page', ['slug' => (string) $page['slug']])],
+                ])],
+            ],
             'page' => $page,
         ]);
     }
@@ -285,7 +479,15 @@ class StoreController
         }
 
         View::render('pages/contact', [
-            'title' => 'Contact Us - RoidsSeek',
+            'seo' => [
+                'title' => Seo::withStore('Contact us'),
+                'description' => 'Contact options, support hours and business details.',
+                'route' => 'contact',
+                'jsonLd' => [JsonLd::breadcrumbs([
+                    ['name' => 'Home', 'url' => Site::absoluteRoute('')],
+                    ['name' => 'Contact', 'url' => Site::absoluteRoute('contact')],
+                ])],
+            ],
             'errors' => $errors,
         ]);
     }
@@ -344,7 +546,17 @@ class StoreController
     public function notFound(): void
     {
         http_response_code(404);
-        View::render('pages/404', ['title' => 'Page not found - RoidsSeek']);
+        View::render('pages/404', [
+            'seo' => [
+                'title' => 'Page not found',
+                'robots' => 'noindex,follow',
+                'route' => '__404__',
+                'status' => 404,
+            ],
+            'popular' => Database::all(
+                'SELECT name, slug FROM categories ORDER BY sort_order LIMIT 6'
+            ),
+        ]);
     }
 
     // ------------------------------------------------------------------
@@ -385,6 +597,8 @@ class StoreController
      */
     private function resolveScope(string $type, ?string $slug): array
     {
+        $live = 'p.is_active = 1 AND p.is_restricted = 0 AND p.discontinued = 0';
+
         switch ($type) {
             case 'category':
                 $row = Database::one('SELECT * FROM categories WHERE slug = ?', [$slug]);
@@ -395,11 +609,12 @@ class StoreController
                 return [
                     $row['name'],
                     (string) ($row['description'] ?? ''),
-                    'p.is_active = 1 AND EXISTS (SELECT 1 FROM product_category pc WHERE pc.product_id = p.id AND pc.category_id = ?)',
+                    $live . ' AND EXISTS (SELECT 1 FROM product_category pc WHERE pc.product_id = p.id AND pc.category_id = ?)',
                     [$row['id']],
                     'category',
                     ['slug' => $row['slug']],
                     ['category', $row['id']],
+                    $row,
                 ];
             case 'brand':
                 $row = Database::one('SELECT * FROM brands WHERE slug = ?', [$slug]);
@@ -410,11 +625,12 @@ class StoreController
                 return [
                     $row['name'],
                     (string) ($row['description'] ?? ''),
-                    'p.is_active = 1 AND p.brand_id = ?',
+                    $live . ' AND p.brand_id = ?',
                     [$row['id']],
                     'brand',
                     ['slug' => $row['slug']],
                     ['brand', $row['id']],
+                    $row,
                 ];
             case 'goal':
                 $row = Database::one('SELECT * FROM goals WHERE slug = ?', [$slug]);
@@ -425,54 +641,59 @@ class StoreController
                 return [
                     $row['name'],
                     (string) ($row['description'] ?? ''),
-                    'p.is_active = 1 AND EXISTS (SELECT 1 FROM product_goal pg WHERE pg.product_id = p.id AND pg.goal_id = ?)',
+                    $live . ' AND EXISTS (SELECT 1 FROM product_goal pg WHERE pg.product_id = p.id AND pg.goal_id = ?)',
                     [$row['id']],
                     'goal',
                     ['slug' => $row['slug']],
                     ['goal', $row['id']],
+                    $row,
                 ];
             case 'shipping':
                 $slug = $slug === 'usa' ? 'usa' : 'international';
                 return [
                     $slug === 'usa' ? 'USA Domestic Shipping' : 'International Shipping',
                     'Products shipped from our ' . ($slug === 'usa' ? 'US domestic' : 'international') . ' warehouse.',
-                    'p.is_active = 1 AND p.shipping_location IN (?, ?)',
+                    $live . ' AND p.shipping_location IN (?, ?)',
                     [$slug, 'both'],
                     'shipping',
                     ['slug' => $slug],
                     ['shipping', $slug],
+                    null,
                 ];
             case 'sale':
                 return [
                     'Best Deals',
                     'Limited-time discounts across the catalogue.',
-                    'p.is_active = 1 AND p.old_price IS NOT NULL AND p.old_price > p.price',
+                    $live . ' AND p.old_price IS NOT NULL AND p.old_price > p.price',
                     [],
                     'sale',
                     [],
                     ['sale', null],
+                    null,
                 ];
             case 'search':
                 $q = trim((string) ($_GET['q'] ?? $_GET['keyword'] ?? ''));
                 return [
                     $q === '' ? 'Search' : 'Search results for "' . $q . '"',
                     '',
-                    'p.is_active = 1 AND (p.name LIKE ? OR p.substance LIKE ? OR p.sku LIKE ? OR p.pharmaceutical_name LIKE ?)',
+                    $live . ' AND (p.name LIKE ? OR p.substance LIKE ? OR p.sku LIKE ? OR p.pharmaceutical_name LIKE ?)',
                     ['%' . $q . '%', '%' . $q . '%', '%' . $q . '%', '%' . $q . '%'],
                     'search',
                     ['q' => $q],
                     ['search', $q],
+                    null,
                 ];
             case 'all':
             default:
                 return [
                     'All Products',
-                    'The complete RoidsSeek catalogue.',
-                    'p.is_active = 1',
+                    'The complete catalogue.',
+                    $live,
                     [],
-                    'products',
+                    'all',
                     [],
                     ['all', null],
+                    null,
                 ];
         }
     }
@@ -485,7 +706,7 @@ class StoreController
         return Database::all(
             "SELECT b.id, b.name, b.slug, COUNT(DISTINCT p.id) AS total
              FROM brands b JOIN products p ON p.brand_id = b.id $join
-             WHERE $where AND p.is_active = 1
+             WHERE $where AND p.is_active = 1 AND p.is_restricted = 0 AND p.discontinued = 0
              GROUP BY b.id, b.name, b.slug ORDER BY b.name",
             $params
         );
@@ -499,7 +720,7 @@ class StoreController
         return Database::all(
             "SELECT p.substance, COUNT(DISTINCT p.id) AS total
              FROM products p $join
-             WHERE $where AND p.is_active = 1 AND p.substance IS NOT NULL AND p.substance <> ''
+             WHERE $where AND p.is_active = 1 AND p.is_restricted = 0 AND p.discontinued = 0 AND p.substance IS NOT NULL AND p.substance <> ''
              GROUP BY p.substance ORDER BY p.substance",
             $params
         );

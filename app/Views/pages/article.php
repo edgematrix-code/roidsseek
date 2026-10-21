@@ -19,9 +19,30 @@
         <div class="row justify-content-center">
             <div class="col-md-10">
                 <h1 class="h1"><?= e($article['title']) ?></h1>
-                <div class="info-meta">
+                <?php
+                $editorial = (array) \App\Support\Site::get('editorial', []);
+                $author = trim((string) ($editorial['authorName'] ?? ''));
+                $reviewer = trim((string) ($article['medical_reviewer_name'] ?? ''));
+                if ($reviewer === '') {
+                    $reviewer = trim((string) ($editorial['reviewerName'] ?? ''));
+                }
+                $reviewedAt = trim((string) ($article['medical_reviewed_at'] ?? ''));
+                if ($reviewedAt === '') {
+                    $reviewedAt = trim((string) ($editorial['lastReviewed'] ?? ''));
+                }
+                ?>
+                <div class="info-meta byline">
+                    <?php if ($author !== ''): ?>
+                        <span>By <?= e($author) ?></span>
+                    <?php endif; ?>
+                    <?php if ($reviewer !== ''): ?>
+                        <span>Medically reviewed by <?= e($reviewer) ?><?= !empty($editorial['reviewerCredentials']) ? ', ' . e((string) $editorial['reviewerCredentials']) : '' ?></span>
+                    <?php endif; ?>
+                    <?php if ($reviewedAt !== ''): ?>
+                        <span>Last reviewed: <?= e(date('F j, Y', strtotime($reviewedAt))) ?></span>
+                    <?php endif; ?>
                     <?php if (!empty($article['published_at'])): ?>
-                        <?= e(date('F j, Y', strtotime($article['published_at']))) ?>
+                        <span>Published: <?= e(date('F j, Y', strtotime($article['published_at']))) ?></span>
                     <?php endif; ?>
                 </div>
                 <?php if (!empty($article['image'])): ?>
@@ -29,6 +50,13 @@
                 <?php endif; ?>
                 <div class="info-content">
                     <p><?= nl2br(e($article['body'] ?: $article['excerpt'])) ?></p>
+                </div>
+                <div class="medical-disclaimer">
+                    <p>
+                        This article is for general information only and is not medical advice.
+                        Always read the manufacturer's leaflet and speak to a qualified healthcare
+                        professional before using any medicine.
+                    </p>
                 </div>
                 <p class="mt-2"><a href="<?= e(url('articles')) ?>">&larr; All articles</a></p>
             </div>

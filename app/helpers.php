@@ -99,17 +99,9 @@ function e($value): string
 /** Build an application URL. Route '' is the home page. */
 function url(string $route = '', array $params = []): string
 {
-    // The route segment is built by hand so slashes stay readable
-    // (r=admin/product instead of r=admin%2Fproduct).
-    $query = '';
-    if ($route !== '') {
-        $query = 'r=' . $route;
-    }
-    if ($params !== []) {
-        $query .= ($query === '' ? '' : '&') . http_build_query($params);
-    }
-
-    return 'index.php' . ($query !== '' ? '?' . $query : '');
+    // Legacy query URLs stay the default; enabling SEO_CLEAN_URLS emits
+    // readable paths such as /product/slug and keeps the old URLs working.
+    return \App\Support\Site::routePath($route, $params);
 }
 
 /** URL of a static asset stored under /assets. */
@@ -132,15 +124,35 @@ function redirect(string $route = '', array $params = []): void
     exit;
 }
 
-function redirect_to(string $location): void
+function redirect_to(string $location, int $status = 302): void
 {
-    header('Location: ' . $location);
+    header('Location: ' . $location, true, $status);
     exit;
 }
 
+/**
+ * Format an amount using the configured locale and currency.
+ *
+ * When no currency is configured the symbol is omitted rather than guessed.
+ */
 function money($amount): string
 {
-    return '$' . number_format((float) $amount, 2);
+    $currency = \App\Support\Site::currency();
+    $value = (float) $amount;
+
+    if ($currency === '') {
+        return number_format($value, 2);
+    }
+
+    if (class_exists(\NumberFormatter::class)) {
+        $formatter = new \NumberFormatter(\App\Support\Site::locale(), \NumberFormatter::CURRENCY);
+        $formatted = $formatter->formatCurrency($value, $currency);
+        if (is_string($formatted)) {
+            return $formatted;
+        }
+    }
+
+    return number_format($value, 2) . ' ' . $currency;
 }
 
 function flash(string $key, ?string $message = null): ?string
@@ -297,4 +309,131 @@ function filter_url(string $route, array $params, string $key, $value): string
 function is_active_path(string $route, array $params = []): bool
 {
     return ($_GET['r'] ?? '') === $route;
+}
+
+/**
+ * Resolve the current request into [route, params].
+ *
+ * Legacy `?r=` URLs, clean paths and the crawl endpoints are all accepted so
+ * existing links keep working after clean URLs are enabled.
+ *
+ * @return array{0:string,1:array<string,string>}
+ */
+function route_request(): array
+{
+    $path = (string) (parse_url($_SERVER['REQUEST_URI'] ?? '/', PHP_URL_PATH) ?: '/');
+    $route = trim((string) ($_GET['r'] ?? ''), '/');
+
+    if ($route !== '' || isset($_GET['r'])) {
+        return [$route, []];
+    }
+    if ($path === '/' || $path === '/index.php') {
+        return ['', []];
+    }
+    if ($path === '/robots.txt') {
+        return ['robots', []];
+    }
+    if ($path === '/sitemap.xml') {
+        return ['sitemap', []];
+    }
+    if ($path === '/feed/products.xml') {
+        return ['feed', []];
+    }
+    if (preg_match('#^/sitemap-([a-z]+)(?:-(\d+))?\.xml$#', $path, $matches) === 1) {
+        if (isset($matches[2]) && $matches[2] !== '') {
+            $_GET['page'] = (int) $matches[2];
+        }
+        return ['sitemap-' . $matches[1], []];
+    }
+    if (!\App\Support\Site::get('cleanUrls', false)) {
+        return ['__not_found__', []];
+    }
+
+    return \App\Support\Site::routeFromPath($path);
+}
+
+/**
+ * Redirect requests that do not use the one canonical host/protocol, and
+ * normalise trailing slashes. Disabled in local environments by config.
+ */
+function enforce_canonical_request(): void
+{
+    $siteUrl = \App\Support\Site::siteUrl();
+    if ($siteUrl === '' || !\App\Support\Site::get('canonicalRedirect', false)) {
+        return;
+    }
+
+    $target = parse_url($siteUrl);
+    if ($target === false || empty($target['host'])) {
+        return;
+    }
+
+    $requestPath = (string) (parse_url($_SERVER['REQUEST_URI'] ?? '/', PHP_URL_PATH) ?: '/');
+    $query = (string) ($_SERVER['QUERY_STRING'] ?? '');
+    $host = (string) ($_SERVER['HTTP_HOST'] ?? '');
+    $isHttps = !empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off';
+
+    $needsHost = $host !== '' && strcasecmp($host, (string) $target['host']) !== 0;
+    $needsScheme = ($target['scheme'] ?? 'https') === 'https' && !$isHttps;
+
+    $normalisedPath = $requestPath;
+    if (\App\Support\Site::get('cleanUrls', false) && $requestPath !== '/') {
+        $normalisedPath = rtrim($requestPath, '/');
+        if ($normalisedPath === '') {
+            $normalisedPath = '/';
+        }
+    }
+    $needsSlash = $normalisedPath !== $requestPath;
+
+    if ($needsHost || $needsScheme || $needsSlash) {
+        $location = $siteUrl . ($normalisedPath === '/' ? '' : $normalisedPath)
+            . ($query !== '' ? '?' . $query : '');
+        header('Location: ' . $location, true, 301);
+        exit;
+    }
+}
+
+/**
+ * Collapse trailing slashes so a clean URL has exactly one form.
+ * Runs even when canonicalHost redirects are disabled (local/staging).
+ */
+function normalize_request_path(): void
+{
+    if (!\App\Support\Site::get('cleanUrls', false)) {
+        return;
+    }
+    $path = (string) (parse_url($_SERVER['REQUEST_URI'] ?? '/', PHP_URL_PATH) ?: '/');
+    if ($path === '/' || !str_ends_with($path, '/')) {
+        return;
+    }
+    $query = (string) ($_SERVER['QUERY_STRING'] ?? '');
+    header('Location: ' . rtrim($path, '/') . ($query !== '' ? '?' . $query : ''), true, 301);
+    exit;
+}
+
+/**
+ * 301 legacy `?r=` URLs to their clean equivalent when clean URLs are on.
+ * Only GET requests are redirected; form posts keep working untouched.
+ */
+function redirect_legacy_url(): void
+{
+    if (!\App\Support\Site::get('cleanUrls', false) || request_method() !== 'GET') {
+        return;
+    }
+    if (!array_key_exists('r', $_GET)) {
+        return;
+    }
+
+    $route = trim((string) $_GET['r'], '/');
+    $params = $_GET;
+    unset($params['r']);
+
+    $target = \App\Support\Site::routePath($route, $params);
+    $current = (string) (parse_url($_SERVER['REQUEST_URI'] ?? '/', PHP_URL_PATH) ?: '/')
+        . (($_SERVER['QUERY_STRING'] ?? '') !== '' ? '?' . $_SERVER['QUERY_STRING'] : '');
+
+    if ($target !== $current) {
+        header('Location: ' . $target, true, 301);
+        exit;
+    }
 }

@@ -26,7 +26,7 @@
                 <div class="account-panel">
                     <h2 class="mt-0">Contact details</h2>
                     <p class="small muted">Questions about an order, shipping or a product? Send us a message and we will reply within 24 hours.</p>
-                    <p class="small"><strong>Support hours</strong><br>Monday to Saturday, 8am to 8pm UTC</p>
+                    <?= \App\Support\View::partial('partials/contact-details') ?>
                     <p class="small"><strong>Before you write</strong><br>Most order and shipping questions are covered in the <a href="<?= e(url('faq')) ?>">FAQ</a>.</p>
                     <p class="small">Looking for tracking? Sign in and open <a href="<?= e(url('account/orders')) ?>">My Orders</a>.</p>
                 </div>
@@ -50,7 +50,7 @@
                             </div>
                             <div class="form-group full">
                                 <label for="subject">Subject</label>
-                                <input class="form-control" id="subject" type="text" name="subject" value="<?= e(old('subject')) ?>">
+                                <input class="form-control" id="subject" type="text" name="subject" value="<?= e(old('subject', $_GET['subject'] ?? '')) ?>">
                             </div>
                             <div class="form-group full">
                                 <label for="message" class="required">Message</label>

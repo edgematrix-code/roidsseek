@@ -10,9 +10,17 @@ use App\Controllers\AdminController;
 use App\Controllers\AuthController;
 use App\Controllers\CartController;
 use App\Controllers\CheckoutController;
+use App\Controllers\SeoController;
 use App\Controllers\StoreController;
 
-$route = trim((string) ($_GET['r'] ?? ''), '/');
+enforce_canonical_request();
+normalize_request_path();
+redirect_legacy_url();
+
+[$route, $params] = route_request();
+foreach ($params as $key => $value) {
+    $_GET[$key] = $value;
+}
 $method = request_method();
 $store = new StoreController();
 
@@ -156,6 +164,32 @@ try {
             $store->newsletter();
             break;
 
+        // -------------------------------------------------------- crawl files
+        case 'robots':
+            (new SeoController())->robots();
+            break;
+
+        case 'sitemap':
+            (new SeoController())->sitemapIndex();
+            break;
+
+        case 'sitemap-products':
+        case 'sitemap-categories':
+        case 'sitemap-brands':
+        case 'sitemap-goals':
+        case 'sitemap-articles':
+        case 'sitemap-pages':
+        case 'sitemap-static':
+            (new SeoController())->sitemap(
+                str_replace('sitemap-', '', $route),
+                max(1, query_int('page', 1))
+            );
+            break;
+
+        case 'feed':
+            (new SeoController())->feed();
+            break;
+
         // ---------------------------------------------------------------- admin
         case 'admin':
             (new AdminController())->dashboard();
@@ -249,6 +283,7 @@ try {
             (new AdminController())->deleteUser();
             break;
 
+        case '__not_found__':
         default:
             $store->notFound();
     }

@@ -24,6 +24,14 @@
                 <div class="info-content">
                     <?= $page['content'] ?>
                 </div>
+                <?php if (in_array($page['slug'], ['licence', 'about', 'contact', 'prescription-policy'], true)): ?>
+                    <?= \App\Support\View::partial('partials/regulatory') ?>
+                <?php endif; ?>
+                <?php if (in_array($page['slug'], ['licence', 'medical-disclaimer', 'prescription-policy', 'editorial-policy', 'privacy-policy', 'terms-of-use', 'returns'], true)): ?>
+                    <p class="small muted mt-3">
+                        This page is a template for the store owner and requires professional legal review before launch.
+                    </p>
+                <?php endif; ?>
             </div>
         </div>
     </div>

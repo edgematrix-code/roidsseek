@@ -8,25 +8,24 @@ $user = user();
 $flashSuccess = flash('success');
 $flashError = flash('error');
 $isHome = ($_GET['r'] ?? '') === '';
+
+// Controllers pass an SEO definition; the legacy $title/$description pair is
+// still accepted so every route keeps working while pages are migrated.
+$seo = \App\Support\Seo::page($seo ?? array_filter([
+    'title' => $title ?? '',
+    'description' => $description ?? '',
+], static fn ($value) => $value !== ''));
+$htmlLang = \App\Support\Site::htmlLang();
+$logoPath = (string) \App\Support\Site::get('logoPath', '');
+$brandName = \App\Support\Site::name();
 ?>
 <!DOCTYPE html>
-<html lang="en-US">
+<html<?= $htmlLang !== '' ? ' lang="' . e($htmlLang) . '"' : '' ?>>
 <head>
-    <meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
-    <title><?= e($title ?? 'RoidsSeek') ?></title>
-    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+    <?php require __DIR__ . '/partials/seo-head.php'; ?>
     <link rel="icon" href="assets/img/favicon.ico" sizes="any">
     <link rel="icon" type="image/png" href="assets/img/favicon-32.png" sizes="32x32">
     <link rel="apple-touch-icon" href="assets/img/apple-touch-icon.png">
-    <meta name="distribution" content="global">
-    <meta name="classification" content="Shopping/Health/Fitness/Medicine/e-Commerce">
-    <meta name="keywords" content="buy steroids online, steroids for sale, steroids online, anabolic steroids for sale, buy steroids">
-    <meta name="description" content="<?= e($description ?? 'Buy steroids online at RoidsSeek. We offer high-quality anabolic steroids for sale. Buy steroids online at reasonable prices. Fast and Safe delivery.') ?>">
-    <meta property="og:type" content="article">
-    <meta property="og:locale" content="en_US">
-    <meta property="og:site_name" content="WWW.ROIDSSEEK.TO">
-    <meta property="og:title" content="<?= e($title ?? 'RoidsSeek') ?>">
-    <meta property="og:description" content="<?= e($description ?? 'Buy steroids online at RoidsSeek. We offer high-quality anabolic steroids for sale. Fast and Safe delivery.') ?>">
     <link rel="stylesheet" href="assets/css/theme.css">
     <link rel="stylesheet" href="assets/css/site.css">
     <link rel="stylesheet" href="assets/css/compat.css">
@@ -57,7 +56,8 @@ $isHome = ($_GET['r'] ?? '') === '';
             <img src="assets/img/mob-menu.svg" alt="Mobile Menu" title="Mobile Menu">
         </span>
         <a class="logo" href="<?= e(url()) ?>">
-            <img src="assets/img/77094.webp" alt="www.roidsseek.to" title="www.roidsseek.to">
+            <img src="<?= e($logoPath !== '' ? image_url($logoPath) : image_url('assets/img/77094.webp')) ?>"
+                 alt="<?= e($brandName !== '' ? $brandName : 'Home') ?>">
         </a>
         <nav class="nav-menu">
             <span class="close-btn close-btn-js">

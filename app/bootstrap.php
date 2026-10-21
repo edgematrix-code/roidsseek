@@ -62,6 +62,15 @@ if (session_status() !== PHP_SESSION_ACTIVE) {
     session_start();
 }
 
+// A production deployment cannot emit valid canonicals without a site URL.
+// Fail fast instead of publishing relative/incorrect absolute URLs.
+if (strtolower((string) env('APP_ENV', '')) === 'production' && \App\Support\Site::siteUrl() === '') {
+    http_response_code(503);
+    error_log('SITE_URL (or APP_URL) must be configured in production.');
+    echo 'Service configuration error.';
+    exit;
+}
+
 App\Support\Database::connect(config('db'));
 
 // Keep the flash message queue from growing between requests.

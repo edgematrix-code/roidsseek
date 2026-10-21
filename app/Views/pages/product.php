@@ -4,6 +4,11 @@ $reviewCount = $rating ? (int) $rating['total'] : 0;
 $primaryCategory = $categories[0] ?? null;
 $inStock = (int) $product['stock'] > 0;
 $oldPrice = old_price_active($product) ? (float) $product['old_price'] : null;
+$rxRequired = ($product['rx_status'] ?? '') === 'rx';
+$restricted = !empty($product['is_restricted']);
+$imageAlt = trim((string) ($product['image_alt'] ?? '')) !== '' ? (string) $product['image_alt'] : (string) $product['name'];
+$editorial = (array) \App\Support\Site::get('editorial', []);
+$storeName = \App\Support\Site::name();
 ?>
 <div class="breadcrumb_container">
     <div class="container">
@@ -37,7 +42,8 @@ $oldPrice = old_price_active($product) ? (float) $product['old_price'] : null;
     <div class="product-detail-row">
         <div class="product-media">
             <span class="product-cover">
-                <img src="<?= e(image_url($product['image'])) ?>" alt="<?= e($product['name']) ?>" title="<?= e($product['name']) ?>">
+                <img src="<?= e(image_url($product['image'])) ?>" alt="<?= e($imageAlt) ?>"
+                     width="600" height="600" fetchpriority="high" decoding="async">
             </span>
         </div>
         <div class="product-information">
@@ -57,6 +63,12 @@ $oldPrice = old_price_active($product) ? (float) $product['old_price'] : null;
                 </div>
             <?php endif; ?>
 
+            <?php if ($rxRequired): ?>
+                <p class="rx-notice"><strong>Prescription required.</strong>
+                    This medicine is supplied only against a valid prescription from a licensed prescriber.
+                </p>
+            <?php endif; ?>
+
             <div class="product-prices">
                 <span class="box-price"><?= money($product['price']) ?></span>
                 <?php if ($oldPrice !== null): ?>
@@ -71,6 +83,21 @@ $oldPrice = old_price_active($product) ? (float) $product['old_price'] : null;
                 <?php endif; ?>
                 <?php if (!empty($product['pharmaceutical_name'])): ?>
                     <tr><th>Pharmaceutical name</th><td><?= e($product['pharmaceutical_name']) ?></td></tr>
+                <?php endif; ?>
+                <?php if (!empty($product['active_ingredient'])): ?>
+                    <tr><th>Active ingredient</th><td><?= e($product['active_ingredient']) ?></td></tr>
+                <?php endif; ?>
+                <?php if (!empty($product['dosage_form'])): ?>
+                    <tr><th>Dosage form</th><td><?= e($product['dosage_form']) ?></td></tr>
+                <?php endif; ?>
+                <?php if (!empty($product['manufacturer'])): ?>
+                    <tr><th>Manufacturer</th><td><?= e($product['manufacturer']) ?></td></tr>
+                <?php endif; ?>
+                <?php if (!empty($product['registration_number'])): ?>
+                    <tr><th>Registration number</th><td><?= e($product['registration_number']) ?></td></tr>
+                <?php endif; ?>
+                <?php if (($product['rx_status'] ?? '') === 'otc' || $rxRequired): ?>
+                    <tr><th>Prescription</th><td><?= $rxRequired ? 'Prescription required' : 'Over the counter' ?></td></tr>
                 <?php endif; ?>
                 <?php if (!empty($product['pack'])): ?>
                     <tr><th>Pack</th><td><?= e($product['pack']) ?><?= !empty($product['strength']) ? ' (' . e($product['strength']) . ')' : '' ?></td></tr>
@@ -104,7 +131,18 @@ $oldPrice = old_price_active($product) ? (float) $product['old_price'] : null;
                     </div>
                 </form>
             <?php else: ?>
-                <p class="muted">This product is currently out of stock. Check back soon.</p>
+                <p class="muted">
+                    This product is temporarily out of stock.
+                    <a href="<?= e(url('contact', ['subject' => 'Notify me: ' . $product['name']])) ?>">Ask to be notified when it returns</a>.
+                </p>
+                <?php if ($categories !== []): ?>
+                    <p class="small">
+                        Similar products:
+                        <?php foreach (array_slice($categories, 0, 2) as $category): ?>
+                            <a href="<?= e(url('category', ['slug' => $category['slug']])) ?>"><?= e($category['name']) ?></a>
+                        <?php endforeach; ?>
+                    </p>
+                <?php endif; ?>
             <?php endif; ?>
 
             <p class="small muted mt-2">
@@ -124,7 +162,12 @@ $oldPrice = old_price_active($product) ? (float) $product['old_price'] : null;
 
     <div class="detail-panel" id="details">
         <h2>Description</h2>
-        <p><?= nl2br(e($product['description'] ?: ($product['short_description'] ?: 'Product details coming soon.'))) ?></p>
+        <?php $productText = trim((string) ($product['description'] ?: $product['short_description'])); ?>
+        <?php if ($productText !== ''): ?>
+            <p><?= nl2br(e($productText)) ?></p>
+        <?php else: ?>
+            <p class="muted">No product description has been supplied for this item yet. Descriptions are published only from manufacturer material or copy approved by the store owner.</p>
+        <?php endif; ?>
         <?php if ($goals !== []): ?>
             <p class="mt-2">
                 Popular for:
@@ -133,6 +176,25 @@ $oldPrice = old_price_active($product) ? (float) $product['old_price'] : null;
                 <?php endforeach; ?>
             </p>
         <?php endif; ?>
+    </div>
+
+    <div class="detail-panel medical-disclaimer">
+        <h2>Medical information</h2>
+        <p>
+            This page provides product and ordering information only and is not medical advice.
+            Always read the manufacturer's leaflet and consult a qualified healthcare professional
+            before using any medicine. Content is added only after review by a licensed pharmacist.
+        </p>
+        <?php if (!empty($editorial['reviewerName'])): ?>
+            <p class="small muted">
+                Medical reviewer: <?= e((string) $editorial['reviewerName']) ?>
+                <?php if (!empty($editorial['reviewerCredentials'])): ?>, <?= e((string) $editorial['reviewerCredentials']) ?><?php endif; ?>
+            </p>
+        <?php endif; ?>
+        <p class="small muted">
+            <a href="<?= e(url('page', ['slug' => 'medical-disclaimer'])) ?>">Medical disclaimer</a>
+            <?php if ($storeName !== ''): ?> &middot; <?= e($storeName) ?><?php endif; ?>
+        </p>
     </div>
 
     <div class="detail-panel" id="reviews">

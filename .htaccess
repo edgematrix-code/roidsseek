@@ -1,0 +1,23 @@
+# Apache configuration. The nginx equivalent is documented in README.md.
+Options -MultiViews -Indexes
+
+<IfModule mod_headers.c>
+    # Keep the credentials file and application sources private.
+    <FilesMatch "^\.">
+        Require all denied
+    </FilesMatch>
+</IfModule>
+
+<IfModule mod_rewrite.c>
+    RewriteEngine On
+
+    # Never serve dotfiles or source directories.
+    RewriteRule "(^|/)\.(?!well-known)" - [F,L]
+    RewriteRule ^(app|config|database|tools|tests|legacy)(/|$) - [F,L]
+
+    # Send clean URLs, robots.txt, sitemaps and the product feed to the
+    # front controller. Existing files (assets, index.php) are served as-is.
+    RewriteCond %{REQUEST_FILENAME} !-f
+    RewriteCond %{REQUEST_FILENAME} !-d
+    RewriteRule ^ index.php [QSA,L]
+</IfModule>
