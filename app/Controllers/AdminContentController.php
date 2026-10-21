@@ -28,6 +28,8 @@ class AdminContentController
                 'name' => ['label' => 'Name', 'type' => 'text', 'required' => true],
                 'slug' => ['label' => 'Slug', 'type' => 'text', 'hint' => 'Leave blank to generate it from the name.'],
                 'description' => ['label' => 'Description', 'type' => 'textarea'],
+                'meta_title' => ['label' => 'Meta title override', 'type' => 'text'],
+                'meta_description' => ['label' => 'Meta description override', 'type' => 'text'],
                 'sort_order' => ['label' => 'Sort order', 'type' => 'number'],
             ],
             'columns' => [
@@ -46,6 +48,9 @@ class AdminContentController
                 'name' => ['label' => 'Name', 'type' => 'text', 'required' => true],
                 'slug' => ['label' => 'Slug', 'type' => 'text', 'hint' => 'Leave blank to generate it from the name.'],
                 'description' => ['label' => 'Description', 'type' => 'textarea'],
+                'meta_title' => ['label' => 'Meta title override', 'type' => 'text'],
+                'meta_description' => ['label' => 'Meta description override', 'type' => 'text'],
+
             ],
             'columns' => [
                 'name' => ['label' => 'Name'],
@@ -63,6 +68,9 @@ class AdminContentController
                 'name' => ['label' => 'Name', 'type' => 'text', 'required' => true],
                 'slug' => ['label' => 'Slug', 'type' => 'text', 'hint' => 'Leave blank to generate it from the name.'],
                 'description' => ['label' => 'Description', 'type' => 'textarea'],
+                'meta_title' => ['label' => 'Meta title override', 'type' => 'text'],
+                'meta_description' => ['label' => 'Meta description override', 'type' => 'text'],
+
             ],
             'columns' => [
                 'name' => ['label' => 'Name'],
@@ -83,6 +91,10 @@ class AdminContentController
                 'body' => ['label' => 'Body', 'type' => 'textarea', 'rows' => 14],
                 'image' => ['label' => 'Image path', 'type' => 'text', 'hint' => 'Relative to the site root, e.g. assets/images/article.webp'],
                 'published_at' => ['label' => 'Published date', 'type' => 'date'],
+                'meta_title' => ['label' => 'Meta title override', 'type' => 'text'],
+                'meta_description' => ['label' => 'Meta description override', 'type' => 'text'],
+                'medical_reviewer_name' => ['label' => 'Medical reviewer name', 'type' => 'text'],
+                'medical_reviewed_at' => ['label' => 'Last medically reviewed', 'type' => 'date'],
                 'is_published' => ['label' => 'Published', 'type' => 'checkbox'],
             ],
             'columns' => [
@@ -137,6 +149,9 @@ class AdminContentController
                 'title' => ['label' => 'Title', 'type' => 'text', 'required' => true],
                 'slug' => ['label' => 'Slug', 'type' => 'text', 'hint' => 'Used in the page URL: index.php?r=page&slug=... Leave blank to generate it from the title.'],
                 'content' => ['label' => 'Content (HTML allowed)', 'type' => 'textarea', 'rows' => 16],
+                'meta_title' => ['label' => 'Meta title override', 'type' => 'text'],
+                'meta_description' => ['label' => 'Meta description override', 'type' => 'text'],
+                'noindex' => ['label' => 'noindex (hide from search results)', 'type' => 'checkbox'],
             ],
             'columns' => [
                 'title' => ['label' => 'Title'],

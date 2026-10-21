@@ -96,6 +96,66 @@ $val = static fn(string $key, $default = '') => e($p[$key] ?? $default);
     </div>
 
     <div class="admin-panel">
+        <h2>SEO &amp; compliance</h2>
+        <p class="form-hint" style="margin-top:0;">
+            These fields drive metadata, structured data, the sitemap and the product feed.
+            Leave them blank when the value is unknown: nothing is guessed or published.
+        </p>
+        <div class="form-grid">
+            <div class="form-group">
+                <label for="meta_title">Meta title override</label>
+                <input id="meta_title" type="text" name="meta_title" value="<?= $val('meta_title') ?>" maxlength="190">
+            </div>
+            <div class="form-group">
+                <label for="meta_description">Meta description override</label>
+                <input id="meta_description" type="text" name="meta_description" value="<?= $val('meta_description') ?>" maxlength="320">
+            </div>
+            <div class="form-group">
+                <label for="image_alt">Image alt text</label>
+                <input id="image_alt" type="text" name="image_alt" value="<?= $val('image_alt') ?>" maxlength="255">
+            </div>
+            <div class="form-group">
+                <label for="rx_status">Rx / OTC status</label>
+                <select id="rx_status" name="rx_status">
+                    <?php foreach (['unknown' => 'Not classified (noindex-safe defaults)', 'otc' => 'Over the counter', 'rx' => 'Prescription only'] as $key => $label): ?>
+                        <option value="<?= e($key) ?>" <?= ($p['rx_status'] ?? 'unknown') === $key ? 'selected' : '' ?>><?= e($label) ?></option>
+                    <?php endforeach; ?>
+                </select>
+            </div>
+            <div class="form-group">
+                <label for="active_ingredient">Active ingredient</label>
+                <input id="active_ingredient" type="text" name="active_ingredient" value="<?= $val('active_ingredient') ?>">
+            </div>
+            <div class="form-group">
+                <label for="dosage_form">Dosage form</label>
+                <input id="dosage_form" type="text" name="dosage_form" value="<?= $val('dosage_form') ?>" placeholder="Tablet, vial, capsule">
+            </div>
+            <div class="form-group">
+                <label for="manufacturer">Manufacturer</label>
+                <input id="manufacturer" type="text" name="manufacturer" value="<?= $val('manufacturer') ?>">
+            </div>
+            <div class="form-group">
+                <label for="registration_number">Registration number</label>
+                <input id="registration_number" type="text" name="registration_number" value="<?= $val('registration_number') ?>">
+            </div>
+            <div class="form-group">
+                <label for="ndc">NDC</label>
+                <input id="ndc" type="text" name="ndc" value="<?= $val('ndc') ?>">
+            </div>
+            <div class="form-group">
+                <label for="gtin">GTIN / barcode</label>
+                <input id="gtin" type="text" name="gtin" value="<?= $val('gtin') ?>" inputmode="numeric">
+            </div>
+        </div>
+        <div class="form-group">
+            <label class="checkbox-row"><input type="checkbox" name="is_restricted" value="1" <?= !empty($p['is_restricted']) ? 'checked' : '' ?>> Restricted product (noindex, excluded from sitemap, feed and related products)</label>
+            <label class="checkbox-row"><input type="checkbox" name="discontinued" value="1" <?= !empty($p['discontinued']) ? 'checked' : '' ?>> Discontinued (301 to the closest equivalent, or 410)</label>
+            <label class="checkbox-row"><input type="checkbox" name="feed_eligible" value="1" <?= !empty($p['feed_eligible']) ? 'checked' : '' ?>> Eligible for the Google Merchant feed</label>
+            <label class="checkbox-row"><input type="checkbox" name="drug_schema_reviewed" value="1" <?= !empty($p['drug_schema_reviewed']) ? 'checked' : '' ?>> Drug fields reviewed by a pharmacist (adds Drug schema)</label>
+        </div>
+    </div>
+
+    <div class="admin-panel">
         <h2>Descriptions</h2>
         <div class="form-group">
             <label for="short_description">Short description</label>

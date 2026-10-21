@@ -44,6 +44,8 @@ CREATE TABLE brands (
     slug        VARCHAR(120) NOT NULL,
     name        VARCHAR(120) NOT NULL,
     description TEXT NULL,
+    meta_title  VARCHAR(190) NULL,
+    meta_description VARCHAR(320) NULL,
     PRIMARY KEY (id),
     UNIQUE KEY brands_slug_unique (slug)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
@@ -54,6 +56,8 @@ CREATE TABLE categories (
     name        VARCHAR(120) NOT NULL,
     description TEXT NULL,
     sort_order  INT NOT NULL DEFAULT 0,
+    meta_title  VARCHAR(190) NULL,
+    meta_description VARCHAR(320) NULL,
     PRIMARY KEY (id),
     UNIQUE KEY categories_slug_unique (slug)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
@@ -63,6 +67,8 @@ CREATE TABLE goals (
     slug        VARCHAR(120) NOT NULL,
     name        VARCHAR(120) NOT NULL,
     description TEXT NULL,
+    meta_title  VARCHAR(190) NULL,
+    meta_description VARCHAR(320) NULL,
     PRIMARY KEY (id),
     UNIQUE KEY goals_slug_unique (slug)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
@@ -83,8 +89,22 @@ CREATE TABLE products (
     old_price          DECIMAL(10,2) NULL,
     stock              INT NOT NULL DEFAULT 0,
     image              VARCHAR(255) NULL,
+    image_alt          VARCHAR(255) NULL,
     ribbon             VARCHAR(120) NULL,
     shipping_location  ENUM('usa','international','both') NOT NULL DEFAULT 'both',
+    rx_status          ENUM('otc','rx','unknown') NOT NULL DEFAULT 'unknown',
+    is_restricted      TINYINT(1) NOT NULL DEFAULT 0,
+    gtin               VARCHAR(40) NULL,
+    ndc                VARCHAR(40) NULL,
+    registration_number VARCHAR(120) NULL,
+    active_ingredient  VARCHAR(190) NULL,
+    dosage_form        VARCHAR(80) NULL,
+    manufacturer       VARCHAR(190) NULL,
+    discontinued       TINYINT(1) NOT NULL DEFAULT 0,
+    feed_eligible      TINYINT(1) NOT NULL DEFAULT 0,
+    drug_schema_reviewed TINYINT(1) NOT NULL DEFAULT 0,
+    meta_title         VARCHAR(190) NULL,
+    meta_description   VARCHAR(320) NULL,
     is_featured        TINYINT(1) NOT NULL DEFAULT 0,
     is_active          TINYINT(1) NOT NULL DEFAULT 1,
     created_at         DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -94,6 +114,7 @@ CREATE TABLE products (
     UNIQUE KEY products_sku_unique (sku),
     KEY products_brand_index (brand_id),
     KEY products_active_index (is_active),
+    KEY products_seo_index (is_active, is_restricted, discontinued),
     CONSTRAINT products_brand_fk FOREIGN KEY (brand_id) REFERENCES brands (id) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
@@ -255,7 +276,13 @@ CREATE TABLE articles (
     image        VARCHAR(255) NULL,
     published_at DATE NULL,
     is_published TINYINT(1) NOT NULL DEFAULT 1,
+    meta_title   VARCHAR(190) NULL,
+    meta_description VARCHAR(320) NULL,
+    medical_reviewer_name VARCHAR(190) NULL,
+    medical_reviewed_at DATE NULL,
+    updated_at   DATETIME NULL,
     PRIMARY KEY (id),
+    KEY articles_published_index (is_published, published_at),
     UNIQUE KEY articles_slug_unique (slug)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
@@ -275,6 +302,9 @@ CREATE TABLE pages (
     slug     VARCHAR(120) NOT NULL,
     title    VARCHAR(190) NOT NULL,
     content  MEDIUMTEXT NULL,
+    meta_title VARCHAR(190) NULL,
+    meta_description VARCHAR(320) NULL,
+    noindex  TINYINT(1) NOT NULL DEFAULT 0,
     PRIMARY KEY (id),
     UNIQUE KEY pages_slug_unique (slug)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;

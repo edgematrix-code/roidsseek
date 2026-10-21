@@ -162,6 +162,20 @@ class AdminController
                 ? input('shipping_location') : 'both',
             'is_featured' => input('is_featured') ? 1 : 0,
             'is_active' => input('is_active') ? 1 : 0,
+            'active_ingredient' => trim((string) input('active_ingredient', '')),
+            'dosage_form' => trim((string) input('dosage_form', '')),
+            'manufacturer' => trim((string) input('manufacturer', '')),
+            'registration_number' => trim((string) input('registration_number', '')),
+            'ndc' => trim((string) input('ndc', '')),
+            'gtin' => preg_replace('/\D/', '', (string) input('gtin', '')) ?: '',
+            'image_alt' => trim((string) input('image_alt', '')),
+            'meta_title' => trim((string) input('meta_title', '')),
+            'meta_description' => trim((string) input('meta_description', '')),
+            'rx_status' => in_array(input('rx_status'), ['otc', 'rx', 'unknown'], true) ? input('rx_status') : 'unknown',
+            'is_restricted' => input('is_restricted') ? 1 : 0,
+            'discontinued' => input('discontinued') ? 1 : 0,
+            'feed_eligible' => input('feed_eligible') ? 1 : 0,
+            'drug_schema_reviewed' => input('drug_schema_reviewed') ? 1 : 0,
         ];
 
         if ($errors !== []) {
@@ -185,26 +199,38 @@ class AdminController
             Database::run(
                 'UPDATE products SET sku = ?, slug = ?, name = ?, brand_id = ?, substance = ?, pharmaceutical_name = ?,
                     pack = ?, strength = ?, short_description = ?, description = ?, price = ?, old_price = ?, stock = ?,
-                    image = ?, ribbon = ?, shipping_location = ?, is_featured = ?, is_active = ? WHERE id = ?',
+                    image = ?, image_alt = ?, ribbon = ?, shipping_location = ?, is_featured = ?, is_active = ?,
+                    active_ingredient = ?, dosage_form = ?, manufacturer = ?, registration_number = ?, ndc = ?, gtin = ?,
+                    rx_status = ?, is_restricted = ?, discontinued = ?, feed_eligible = ?, drug_schema_reviewed = ?,
+                    meta_title = ?, meta_description = ? WHERE id = ?',
                 [
                     $fields['sku'], $fields['slug'], $fields['name'], $fields['brand_id'], $fields['substance'],
                     $fields['pharmaceutical_name'], $fields['pack'], $fields['strength'], $fields['short_description'],
                     $fields['description'], $fields['price'], $fields['old_price'], $fields['stock'], $fields['image'],
-                    $fields['ribbon'], $fields['shipping_location'], $fields['is_featured'], $fields['is_active'], $id,
+                    $fields['image_alt'], $fields['ribbon'], $fields['shipping_location'], $fields['is_featured'], $fields['is_active'],
+                    $fields['active_ingredient'], $fields['dosage_form'], $fields['manufacturer'],
+                    $fields['registration_number'], $fields['ndc'], $fields['gtin'], $fields['rx_status'],
+                    $fields['is_restricted'], $fields['discontinued'], $fields['feed_eligible'],
+                    $fields['drug_schema_reviewed'], $fields['meta_title'], $fields['meta_description'], $id,
                 ]
             );
             $productId = $id;
         } else {
             $productId = Database::insert(
                 'INSERT INTO products (sku, slug, name, brand_id, substance, pharmaceutical_name, pack, strength,
-                    short_description, description, price, old_price, stock, image, ribbon, shipping_location,
-                    is_featured, is_active)
-                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+                    short_description, description, price, old_price, stock, image, image_alt, ribbon, shipping_location,
+                    is_featured, is_active, active_ingredient, dosage_form, manufacturer, registration_number, ndc, gtin,
+                    rx_status, is_restricted, discontinued, feed_eligible, drug_schema_reviewed, meta_title, meta_description)
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
                 [
                     $fields['sku'], $fields['slug'], $fields['name'], $fields['brand_id'], $fields['substance'],
                     $fields['pharmaceutical_name'], $fields['pack'], $fields['strength'], $fields['short_description'],
                     $fields['description'], $fields['price'], $fields['old_price'], $fields['stock'], $fields['image'],
-                    $fields['ribbon'], $fields['shipping_location'], $fields['is_featured'], $fields['is_active'],
+                    $fields['image_alt'], $fields['ribbon'], $fields['shipping_location'], $fields['is_featured'], $fields['is_active'],
+                    $fields['active_ingredient'], $fields['dosage_form'], $fields['manufacturer'],
+                    $fields['registration_number'], $fields['ndc'], $fields['gtin'], $fields['rx_status'],
+                    $fields['is_restricted'], $fields['discontinued'], $fields['feed_eligible'],
+                    $fields['drug_schema_reviewed'], $fields['meta_title'], $fields['meta_description'],
                 ]
             );
         }
