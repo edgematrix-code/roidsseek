@@ -127,6 +127,10 @@ shows the dashboard.
   mutating form, and passwords use `password_hash()`/`password_verify()`.
 - Guest checkout is supported. Orders are written inside a transaction and
   stock is decremented; coupon usage counts are incremented on checkout.
+- Bitcoin is the only payment method. The receive address comes from
+  `BTC_ADDRESS`; the confirmation page shows the copyable address, a BIP21
+  wallet link and the configured confirmation count. `BTC_USD_RATE` is
+  optional: without it the BTC amount is confirmed by support.
 - Cart contents live in the session, priced from the database on every
   request. Shipping is free above $399, otherwise a flat $25.
 - Reviews are submitted as `pending` and only appear once approved in
@@ -135,6 +139,23 @@ shows the dashboard.
   displays it on the page instead of emailing it.
 - Product images are served from `assets/products/`; the helper
   `image_url()` falls back to `assets/images/placeholder.svg`.
+
+## SEO
+
+Business details, metadata, structured data, sitemaps and the feed are
+configured in `config/site.php` (environment driven). See `SETUP.md` for every
+field and `SEO-REPORT.md` for the implementation report.
+
+```bash
+php database/migrate.php   # SEO/compliance columns (idempotent)
+npm run config:check       # unfilled fields and disabled features
+npm run seo:check          # SEO verification against a running store
+npm run seo:gaps           # content gap report
+```
+
+`/robots.txt`, `/sitemap.xml`, `/sitemap-*.xml` and `/feed/products.xml` are
+served by `SeoController`. Clean URLs and canonical-host redirects are off by
+default; enable them with `SEO_CLEAN_URLS` and `SEO_CANONICAL_REDIRECT`.
 
 ## Tests
 
@@ -164,9 +185,12 @@ router.php              built-in-server router that blocks .env and sources
 .env.example            documented environment template (copy to .env)
 app/bootstrap.php       config, session, helpers, autoload
 app/Support/            Database, Auth, Cart, View, Nav
-app/Controllers/        Store, Cart, Checkout, Auth, Account, Admin
+app/Controllers/        Store, Cart, Checkout, Auth, Account, Admin, Seo
+app/Support/            Database, Auth, Cart, View, Nav, Site, Seo, JsonLd
 app/Views/              layout, pages, partials, admin
-config/config.php       configuration (reads env() only, no secrets)
+config/config.php       application configuration (env only, no secrets)
+config/site.php         business identity, locale, regulatory and SEO config
+tools/                  config check, SEO check, lint, OG image generator
 database/schema.sql     DDL
 database/seed.php       schema + catalogue importer
 database/import_static.py  rebuilds data/*.json from the legacy pages

@@ -1,0 +1,14 @@
+{
+  "name": "storefront-seo",
+  "private": true,
+  "description": "SEO tooling aliases for the PHP storefront (no npm dependencies).",
+  "scripts": {
+    "config:check": "php tools/config_check.php",
+    "config:check:production": "php tools/config_check.php --production",
+    "seo:check": "php tools/seo_check.php",
+    "seo:gaps": "php tools/seo_check.php --gaps",
+    "seo:og-image": "php tools/make_og_image.php",
+    "lint": "php tools/lint.php",
+    "migrate": "php database/migrate.php"
+  }
+}
