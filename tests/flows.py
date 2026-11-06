@@ -15,11 +15,11 @@ def check(name, ok, detail=""):
 
 
 def get(s, route, **kw):
-    return s.get(BASE, params={"r": route, **kw}, timeout=30)
+    return s.get(BASE, params={"p": route, **kw}, timeout=30)
 
 
 def post(s, route, data, **kw):
-    return s.post(BASE, params={"r": route, **kw}, data=data, timeout=30)
+    return s.post(BASE, params={"p": route, **kw}, data=data, timeout=30)
 
 
 def csrf(html):
@@ -33,7 +33,7 @@ def login(s, email, pw):
 
 s = requests.Session()
 r = get(s, "all")
-slug = re.search(r"r=product&(?:amp;)?slug=([a-z0-9\-]+)", r.text).group(1)
+slug = re.search(r'href="[^"]*/shop/([a-z0-9\-]+)"', r.text).group(1)
 review_body = f"This is a test review body {int(time.time())} long enough."
 r = get(s, "product", slug=slug)
 t = csrf(r.text)

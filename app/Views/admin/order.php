@@ -8,6 +8,9 @@
     <div class="stat-card"><span>Status</span><strong style="font-size:18px;"><?= e(ucfirst($order['status'])) ?></strong></div>
     <div class="stat-card"><span>Payment</span><strong style="font-size:18px;"><?= e(str_replace('_', ' ', $order['payment_method'])) ?></strong></div>
     <div class="stat-card"><span>Placed</span><strong style="font-size:16px;"><?= e(date('M j, Y H:i', strtotime($order['created_at']))) ?></strong></div>
+<?php if ($order['status'] === 'pending_payment' && $order['payment_expires_at']): ?>
+    <div class="stat-card"><span>Expires</span><strong><?= e(date('M j, Y H:i', strtotime($order['payment_expires_at']))) ?> UTC</strong></div>
+    <?php endif; ?>
 </div>
 
 <div class="admin-panel">
@@ -16,8 +19,8 @@
         <?= csrf_field() ?>
         <input type="hidden" name="id" value="<?= (int) $order['id'] ?>">
         <select name="status">
-            <?php foreach (['pending', 'paid', 'shipped', 'completed', 'cancelled'] as $option): ?>
-                <option value="<?= $option ?>" <?= $order['status'] === $option ? 'selected' : '' ?>><?= ucfirst($option) ?></option>
+            <?php foreach (['pending_payment', 'processing', 'payment_submitted', 'paid', 'failed', 'expired', 'pending', 'shipped', 'completed', 'cancelled'] as $option): ?>
+                <option value="<?= $option ?>" <?= $order['status'] === $option ? 'selected' : '' ?>><?= ucfirst(str_replace('_', ' ', $option)) ?></option>
             <?php endforeach; ?>
         </select>
         <button class="btn btn-primary" type="submit">Save</button>

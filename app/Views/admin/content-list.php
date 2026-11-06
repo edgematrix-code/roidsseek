@@ -2,8 +2,8 @@
 <div class="admin-topbar">
     <h1><?= e($entity['label']) ?></h1>
     <div class="admin-search">
-        <form class="admin-search" method="get" action="index.php">
-            <input type="hidden" name="r" value="admin/content">
+        <form class="admin-search" method="get" action="<?= e(url()) ?>">
+            <input type="hidden" name="<?= e(route_param()) ?>" value="admin/content">
             <input type="hidden" name="entity" value="<?= e($entityKey) ?>">
             <input type="text" name="q" value="<?= e($search) ?>" placeholder="Search <?= e(strtolower($entity['label'])) ?>">
             <button class="btn btn-light" type="submit">Search</button>

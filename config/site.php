@@ -23,7 +23,7 @@ declare(strict_types=1);
  *   regulatory:array<string,string>,
  *   logoPath:string, defaultOgImage:string,
  *   gscVerification:string, ga4MeasurementId:string,
- *   cleanUrls:bool, canonicalRedirect:bool, merchantFeed:bool,
+ *   cleanUrls:bool, canonicalRedirect:bool, merchantFeed:bool, noindexSite:bool,
  *   merchantCountry:string, merchantCurrency:string,
  *   defaultMetaDescription:string
  * }
@@ -59,7 +59,12 @@ return [
     ],
     'phone' => (string) env('SITE_PHONE', ''),
     'whatsapp' => (string) env('SITE_WHATSAPP', ''),
-    'email' => (string) env('SITE_EMAIL', ''),
+    // Published support address. SITE_EMAIL overrides it, but a blank one (the
+    // older .env.example shipped `SITE_EMAIL=` with no value) still resolves to
+    // the official address instead of hiding the contact details.
+    'email' => trim((string) env('SITE_EMAIL', '')) !== ''
+        ? trim((string) env('SITE_EMAIL', ''))
+        : 'roidsseeksupp@tutanota.com',
     'openingHours' => (string) env('SITE_OPENING_HOURS', ''),
     // Only true when the published address is staffed and may be shown.
     'hasPhysicalLocation' => filter_var(env('SITE_HAS_PHYSICAL_LOCATION', 'false'), FILTER_VALIDATE_BOOL),
@@ -103,10 +108,17 @@ return [
     'ga4MeasurementId' => (string) env('GA4_MEASUREMENT_ID', ''),
 
     // -------------------------------------------------------------------- SEO
-    // true = emit /product/{slug} style URLs; legacy query URLs 301 to them.
-    'cleanUrls' => filter_var(env('SEO_CLEAN_URLS', 'false'), FILTER_VALIDATE_BOOL),
+    // true = emit path URLs (/shop/{slug}, /collections/{slug}, /learn/{slug})
+    // and 301 the older index.php?r= / index.php?p= forms to them. On by
+    // default: the query form is only a fallback for hosts without the rewrite
+    // rules in .htaccess / router.php.
+    'cleanUrls' => filter_var(env('SEO_CLEAN_URLS', 'true'), FILTER_VALIDATE_BOOL),
     // true = 301 requests whose host/protocol differ from siteUrl.
     'canonicalRedirect' => filter_var(env('SEO_CANONICAL_REDIRECT', 'false'), FILTER_VALIDATE_BOOL),
+    // Sitewide deindex, off by default. While true every page is served
+    // "noindex,nofollow" and every response carries the X-Robots-Tag header.
+    // Set SEO_NOINDEX=true to pull the whole site out of the index at once.
+    'noindexSite' => filter_var(env('SEO_NOINDEX', 'false'), FILTER_VALIDATE_BOOL),
     // Merchant feed is opt-in; it stays closed until the country is known and
     // the medicines policy for that country has been checked.
     'merchantFeed' => filter_var(env('SEO_MERCHANT_FEED', 'false'), FILTER_VALIDATE_BOOL),

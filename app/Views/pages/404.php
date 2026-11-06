@@ -20,7 +20,7 @@
             <p>The page you are looking for has moved or no longer exists.</p>
             <form action="<?= e(url('search')) ?>" method="get" class="page-404-search">
                 <?php if ((\App\Support\Site::get('cleanUrls') ?: false) === false): ?>
-                    <input type="hidden" name="r" value="search">
+                    <input type="hidden" name="<?= e(route_param()) ?>" value="search">
                 <?php endif; ?>
                 <input type="text" name="q" placeholder="Search products" aria-label="Search products">
                 <button type="submit" class="btn btn-mix btn-primary">Search</button>

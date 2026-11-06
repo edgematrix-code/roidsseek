@@ -7,7 +7,9 @@ $navGoals = Nav::goals();
 $user = user();
 $flashSuccess = flash('success');
 $flashError = flash('error');
-$isHome = ($_GET['r'] ?? '') === '';
+$currentRoute = (string) (route_request()[0] ?? '');
+$isHome = $currentRoute === '';
+$isReviews = $currentRoute === 'reviews';
 
 // Controllers pass an SEO definition; the legacy $title/$description pair is
 // still accepted so every route keeps working while pages are migrated.
@@ -21,27 +23,34 @@ $brandName = \App\Support\Site::name();
 ?>
 <!DOCTYPE html>
 <html<?= $htmlLang !== '' ? ' lang="' . e($htmlLang) . '"' : '' ?>>
-<head>
+<head prefix="og: http://ogp.me/ns#">
     <?php require __DIR__ . '/partials/seo-head.php'; ?>
-    <link rel="icon" href="assets/img/favicon.ico" sizes="any">
-    <link rel="icon" type="image/png" href="assets/img/favicon-32.png" sizes="32x32">
-    <link rel="apple-touch-icon" href="assets/img/apple-touch-icon.png">
-    <link rel="stylesheet" href="assets/css/theme.css">
-    <link rel="stylesheet" href="assets/css/site.css">
-    <link rel="stylesheet" href="assets/css/compat.css">
+    <!-- Favicons. Google Search reads a square icon of at least 48x48 from the
+         home page, so keep the 96x96 and 144x144 PNGs reachable. /favicon.ico is
+         a real multi-size ICO (16/32/48px) for browsers that request it directly. -->
+    <link rel="icon" href="/favicon.ico" sizes="16x16 32x32 48x48">
+    <link rel="icon" type="image/png" sizes="16x16" href="/assets/img/favicon-16.png">
+    <link rel="icon" type="image/png" sizes="32x32" href="/assets/img/favicon-32.png">
+    <link rel="icon" type="image/png" sizes="96x96" href="/assets/img/favicon-96.png">
+    <link rel="icon" type="image/png" sizes="144x144" href="/assets/img/favicon-144.png">
+    <link rel="apple-touch-icon" sizes="180x180" href="/assets/img/apple-touch-icon.png">
+    <link rel="manifest" href="/site.webmanifest">
+    <link rel="stylesheet" href="<?= e(asset('css/theme.css')) ?>">
+    <link rel="stylesheet" href="<?= e(asset('css/site.css')) ?>">
+    <link rel="stylesheet" href="<?= e(asset('css/compat.css')) ?>">
 </head>
 <body class="<?= $isHome ? 'home' : '' ?>">
 <div id="quick-search" data-characters="More then 4 characters" data-outofstock="Out of stock" data-search="Search" data-noitems="No Items" data-itemsfound="0 Items Found">
     <div class="quick-search-overlay"></div>
     <div class="quick-search-content">
         <div class="quick-search-field-container container">
-            <form action="index.php" method="get" id="searchform">
-                <input type="hidden" name="r" value="search">
+            <form action="<?= e(url()) ?>" method="get" id="searchform">
+                <input type="hidden" name="<?= e(route_param()) ?>" value="search">
                 <button type="submit">
-                    <img src="assets/img/ico-search-444.svg" alt="Search Button" title="Search Button">
+                    <img src="<?= e(asset('img/ico-search-444.svg')) ?>" alt="Search Button" title="Search Button">
                 </button>
                 <span class="loader">
-                    <img src="assets/img/ajax-loader.gif" alt="Ajax Loader">
+                    <img src="<?= e(asset('img/ajax-loader.gif')) ?>" alt="Ajax Loader">
                 </span>
                 <input type="text" autocomplete="off" id="textbox" class="text quick-search-field" maxlength="100" name="q" value="" placeholder="Search">
             </form>
@@ -53,7 +62,7 @@ $brandName = \App\Support\Site::name();
 <header class="header-fixed">
     <div class="container nav-container">
         <span class="mob-menu close-btn-js">
-            <img src="assets/img/mob-menu.svg" alt="Mobile Menu" title="Mobile Menu">
+            <img src="<?= e(asset('img/mob-menu.svg')) ?>" alt="Mobile Menu" title="Mobile Menu">
         </span>
         <a class="logo" href="<?= e(url()) ?>">
             <img src="<?= e($logoPath !== '' ? image_url($logoPath) : image_url('assets/img/77094.webp')) ?>"
@@ -61,12 +70,12 @@ $brandName = \App\Support\Site::name();
         </a>
         <nav class="nav-menu">
             <span class="close-btn close-btn-js">
-                <img src="assets/img/ico-close-444.svg" alt="Close Button">
+                <img src="<?= e(asset('img/ico-close-444.svg')) ?>" alt="Close Button">
             </span>
-            <form action="index.php" method="get" class="searchform-mob" id="searchform-mob">
-                <input type="hidden" name="r" value="search">
+            <form action="<?= e(url()) ?>" method="get" class="searchform-mob" id="searchform-mob">
+                <input type="hidden" name="<?= e(route_param()) ?>" value="search">
                 <button type="submit">
-                    <img src="assets/img/ico-search-444.svg" alt="Search Button">
+                    <img src="<?= e(asset('img/ico-search-444.svg')) ?>" alt="Search Button">
                 </button>
                 <input type="text" class="text" maxlength="100" name="q" value="<?= e($_GET['q'] ?? '') ?>" placeholder="Search">
             </form>
@@ -159,10 +168,13 @@ $brandName = \App\Support\Site::name();
                 <li class="">
                     <a href="<?= e(url('contact')) ?>">Contact Us</a>
                 </li>
+                <li class="reviews-nav<?= $isReviews ? ' is-current' : '' ?>">
+                    <a href="<?= e(url('reviews')) ?>"<?= $isReviews ? ' aria-current="page"' : '' ?>>Customer Reviews</a>
+                </li>
             </ul>
         </nav>
         <div class="user-info">
-            <img id="searchBtn" class="search-btn" src="assets/img/ico-search-444.svg" alt="Search Button" title="Search Button">
+            <img id="searchBtn" class="search-btn" src="<?= e(asset('img/ico-search-444.svg')) ?>" alt="Search Button" title="Search Button">
             <?php if ($user): ?>
                 <?php if (($user['role'] ?? '') === 'admin'): ?>
                     <a class="btn std-button" href="<?= e(url('admin')) ?>">Admin</a>
@@ -208,6 +220,8 @@ $brandName = \App\Support\Site::name();
     </main>
     <?php require __DIR__ . '/partials/footer.php'; ?>
 </section>
-<script src="assets/js/ui.js"></script>
+<?php require __DIR__ . '/partials/cart-modal.php'; ?>
+<?php require __DIR__ . '/partials/visit-modals.php'; ?>
+<script src="<?= e(asset('js/ui.js')) ?>"></script>
 </body>
 </html>

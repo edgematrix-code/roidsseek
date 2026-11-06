@@ -1,9 +1,20 @@
 <?php
 $adminUser = user();
-$pendingReviews = (int) \App\Support\Database::value("SELECT COUNT(*) FROM reviews WHERE status = 'pending'");
+// Only reviews no admin has opened yet raise the Reviews badge; approving or
+// rejecting one also removes it from the count.
+$pendingReviews = (int) \App\Support\Database::value(
+    "SELECT COUNT(*) FROM reviews WHERE status = 'pending' AND admin_read_at IS NULL"
+);
 $unreadMessages = (int) \App\Support\Database::value('SELECT COUNT(*) FROM contact_messages WHERE is_read = 0');
-$pendingOrders = (int) \App\Support\Database::value("SELECT COUNT(*) FROM orders WHERE status = 'pending'");
-$route = $_GET['r'] ?? 'admin';
+// Only orders no admin has opened yet, and only ones that still need action,
+// raise the Orders badge. Reading the order (list or detail) stamps
+// admin_read_at, so the bubble clears on the page where it was read.
+$pendingOrders = (int) \App\Support\Database::value(
+    "SELECT COUNT(*) FROM orders
+     WHERE admin_read_at IS NULL
+       AND status NOT IN ('completed', 'cancelled', 'failed', 'expired')"
+);
+$route = $_GET[route_param()] ?? ($_GET['r'] ?? 'admin');
 $contentEntity = (string) ($_GET['entity'] ?? '');
 $success = flash('success');
 $error = flash('error');
@@ -13,22 +24,23 @@ $error = flash('error');
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="robots" content="noindex,nofollow">
     <title><?= e($title ?? 'Admin - RoidsSeek') ?></title>
-    <link rel="icon" href="assets/img/favicon.ico" sizes="any">
-    <link rel="icon" type="image/png" href="assets/img/favicon-32.png" sizes="32x32">
-    <link rel="apple-touch-icon" href="assets/img/apple-touch-icon.png">
-    <link rel="stylesheet" href="assets/css/theme.css">
-    <link rel="stylesheet" href="assets/css/app.css">
+    <link rel="icon" href="<?= e(asset('img/favicon.ico')) ?>" sizes="any">
+    <link rel="icon" type="image/png" href="<?= e(asset('img/favicon-32.png')) ?>" sizes="32x32">
+    <link rel="apple-touch-icon" href="<?= e(asset('img/apple-touch-icon.png')) ?>">
+    <link rel="stylesheet" href="<?= e(asset('css/theme.css')) ?>">
+    <link rel="stylesheet" href="<?= e(asset('css/app.css')) ?>">
 </head>
 <body class="admin-body">
 <header class="admin-header">
     <div class="container nav-container">
         <button class="admin-menu-toggle" type="button" aria-expanded="false" aria-controls="admin-sidebar">
-            <img src="assets/img/mob-menu.svg" alt="Menu">
+            <img src="<?= e(asset('img/mob-menu.svg')) ?>" alt="Menu">
             <span>Menu</span>
         </button>
         <a class="logo" href="<?= e(url()) ?>">
-            <img src="assets/img/77094.webp" alt="www.roidsseek.to" title="www.roidsseek.to">
+            <img src="<?= e(asset('img/77094.webp')) ?>" alt="www.roidsseek.to" title="www.roidsseek.to">
         </a>
         <span class="admin-console-tag">Admin console</span>
         <div class="admin-header-user">

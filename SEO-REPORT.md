@@ -6,7 +6,7 @@ Date: 2026-10-21 · Site URL: `https://roidsseek.io`
 
 | Item | Finding |
 |---|---|
-| Framework | Dependency-free PHP 8.2+ (tested on 8.5), single front controller `index.php?r=route` |
+| Framework | Dependency-free PHP 8.2+ (tested on 8.5), single front controller `index.php` with path URLs (`/shop/{slug}`) |
 | Router | `index.php` switch; `router.php` for the built-in server; `.htaccess` for Apache |
 | TypeScript | None — PHP app with no build step |
 | Hosting target | Apache/shared hosting or the PHP built-in server (Herd locally) |
@@ -52,8 +52,9 @@ static files.
 
 ### Phase 2 — host, URLs, indexation
 - Absolute URLs are always built from `siteUrl` (`app/Support/Site.php`).
-- `SEO_CANONICAL_REDIRECT` (301 host/scheme) and `SEO_CLEAN_URLS` (readable
-  paths, one-hop 301 from legacy `?r=` URLs, trailing-slash 301).
+- `SEO_CANONICAL_REDIRECT` (301 host/scheme) and `SEO_CLEAN_URLS` (path URLs
+  `/shop/{slug}`, `/collections/{slug}`, `/learn/{slug}`, one-hop 301 from
+  legacy `?r=`/`?p=` URLs, trailing-slash 301).
 - `index.php`, `router.php`, `.htaccess` route `/robots.txt`, `/sitemap*.xml`
   and `/feed/products.xml`.
 - `app/Controllers/SeoController.php`: robots, sitemap index, per-section
@@ -159,10 +160,12 @@ and medicines <https://support.google.com/adspolicy/answer/176031>.
 
 1. **Canonical host** is `https://roidsseek.io` from `SITE_URL`. Turn on
    `SEO_CANONICAL_REDIRECT=true` in production.
-2. **Clean URLs are implemented but off** (`SEO_CLEAN_URLS=false`) because the
-   existing regression suite and the previous `.env.example` assume legacy
-   `?r=` URLs. Enabling it gives `/product/{slug}` plus one-hop 301s from old
-   URLs; the test suite's URL assertions would then need updating.
+2. **Clean URLs are on** (`SEO_CLEAN_URLS=true`) and use a dedicated path
+   vocabulary: `/shop/{slug}`, `/collections/{slug}`, `/brands/{slug}`,
+   `/goals/{slug}`, `/learn/{slug}`, `/info/{slug}`, `/delivery/{slug}`,
+   `/catalogue`, `/deals`, `/help`, `/news`. The query form `index.php?p=` and
+   the older `index.php?r=` form 301 to it, and `/index.php` itself 301s to
+   `/`, so the sitemap only ever lists these paths.
 3. **Noindex vs Disallow:** private pages stay crawlable with `noindex`;
    `robots.txt` only blocks admin/mutations/facets. This is deliberate.
 4. **Facet whitelist is empty.** No filtered combination is indexable. Add
@@ -187,8 +190,8 @@ and medicines <https://support.google.com/adspolicy/answer/176031>.
 - [ ] Set `SITE_LOCALE`, `SITE_LANGUAGE`, `SITE_COUNTRY`, `SITE_TIMEZONE`.
 - [ ] Verify `roidsseek.io` in Search Console (`GSC_VERIFICATION`), submit
       `https://roidsseek.io/sitemap.xml`.
-- [ ] Enable `SEO_CLEAN_URLS` and `SEO_CANONICAL_REDIRECT`, then spot-check old
-      links and update the test assertions that expect `?r=`.
+- [ ] Confirm the host rewrites unknown paths to `index.php` (`.htaccess` on
+      Apache, `try_files` on nginx), then spot-check old `?r=` links redirect.
 - [ ] Create a Google Business Profile only if a staffed physical location
       exists; set `SITE_HAS_PHYSICAL_LOCATION=true` and fill address/phone/hours.
 - [ ] Create Merchant Center, confirm medicine-policy eligibility for the

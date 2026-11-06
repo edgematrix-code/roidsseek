@@ -67,9 +67,17 @@ class AccountController
         }
         verify_csrf();
 
+        $user = Auth::user();
+
+        // The form is rendered blank, so an empty field means "leave it as it
+        // is" rather than "erase it".
         $name = trim((string) input('name', ''));
         $email = strtolower(trim((string) input('email', '')));
         $phone = trim((string) input('phone', ''));
+
+        $name = $name !== '' ? $name : (string) $user['name'];
+        $email = $email !== '' ? $email : (string) $user['email'];
+        $phone = $phone !== '' ? $phone : (string) ($user['phone'] ?? '');
 
         $errors = [];
         if (strlen($name) < 2) {
@@ -84,7 +92,6 @@ class AccountController
             $errors['email'] = 'That email belongs to another account.';
         }
 
-        $user = Auth::user();
         if ($errors !== []) {
             View::render('pages/account', [
                 'title' => 'My Account - RoidsSeek',

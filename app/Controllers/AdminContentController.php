@@ -147,7 +147,7 @@ class AdminContentController
             'table' => 'pages',
             'fields' => [
                 'title' => ['label' => 'Title', 'type' => 'text', 'required' => true],
-                'slug' => ['label' => 'Slug', 'type' => 'text', 'hint' => 'Used in the page URL: index.php?r=page&slug=... Leave blank to generate it from the title.'],
+                'slug' => ['label' => 'Slug', 'type' => 'text', 'hint' => 'Used in the page URL, e.g. /collections/{slug} or /learn/{slug}. Leave blank to generate it from the title.'],
                 'content' => ['label' => 'Content (HTML allowed)', 'type' => 'textarea', 'rows' => 16],
                 'meta_title' => ['label' => 'Meta title override', 'type' => 'text'],
                 'meta_description' => ['label' => 'Meta description override', 'type' => 'text'],

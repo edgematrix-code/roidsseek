@@ -28,7 +28,7 @@
     <?php if ($justPlaced): ?>
         <div class="site-flash site-flash--success">
             Thank you! Your order <strong><?= e($order['order_number']) ?></strong> has been received.
-            Send the Bitcoin payment below and keep your transaction ID.
+            Complete the payment below and keep your transaction ID.
         </div>
     <?php endif; ?>
 
@@ -38,7 +38,7 @@
                 <div class="muted small">Placed <?= e(date('M j, Y \a\t H:i', strtotime($order['created_at']))) ?></div>
             </div>
             <div class="text-right">
-                <span class="badge badge-<?= e($order['status']) ?>"><?= e($order['status']) ?></span>
+                <span class="badge badge-<?= e($order['status']) ?>"><?= e(ucfirst(str_replace('_', ' ', $order['status']))) ?></span>
                 <div class="small muted mt-2">Payment: <?= e(str_replace('_', ' ', $order['payment_method'])) ?></div>
             </div>
         </div>
@@ -91,68 +91,76 @@
         </div>
 
         <?php
-        $btc = (array) config('payments.btc', []);
-        $btcAddress = trim((string) ($btc['address'] ?? ''));
-        $btcRate = (float) ($btc['usd_rate'] ?? 0);
-        $btcAmount = $btcRate > 0 ? (float) $order['total'] / $btcRate : null;
-        $btcLabel = trim((string) ($btc['label'] ?? '')) !== '' ? (string) $btc['label'] : 'Order ' . $order['order_number'];
-        $bip21 = 'bitcoin:' . $btcAddress . '?label=' . rawurlencode($btcLabel);
-        if ($btcAmount !== null) {
-            $bip21 .= '&amount=' . number_format($btcAmount, 8, '.', '');
+        $method = \App\Support\PaymentMethod::get((string) ($order['payment_method'] ?? \App\Support\PaymentMethod::BITCOIN));
+        $coinAddress = trim((string) ($order['payment_address'] ?? ''));
+        if ($coinAddress === '') {
+            $coinAddress = trim((string) $method['address']);
         }
-        $awaitingPayment = $order['payment_method'] === 'bitcoin' && $order['status'] === 'pending';
+        $coinAmount = \App\Support\PaymentMethod::amount($order, $method);
+        $coinUri = \App\Support\PaymentMethod::uri($method, $coinAddress, $coinAmount, 'Order ' . $order['order_number']);
+        $awaitingPayment = in_array((string) $order['status'], ['pending', 'pending_payment'], true);
+        $coinLabel = $coinAmount !== null ? $coinAmount . ' ' . $method['symbol'] : money($order['total']);
         ?>
         <?php if ($awaitingPayment): ?>
-            <section class="btc-panel" aria-labelledby="btc-panel-title">
-                <div class="btc-panel__head">
-                    <span class="btc-mark btc-mark--lg" aria-hidden="true">&#8383;</span>
+            <section class="pay-panel" aria-labelledby="order-pay-title">
+                <div class="pay-panel__status">
+                    <span class="pay-panel__coin" aria-hidden="true"><?= \App\Support\PaymentMethod::icon($method['key']) ?></span>
                     <div>
-                        <h2 id="btc-panel-title">Pay with Bitcoin</h2>
-                        <p>Send the amount below to the address shown. The order is confirmed after
-                            <?= (int) ($btc['confirmations'] ?? 2) ?> network confirmation<?= (int) ($btc['confirmations'] ?? 2) === 1 ? '' : 's' ?>.</p>
+                        <h2 id="order-pay-title">Pay with <?= e($method['label']) ?></h2>
+                        <p>
+                            Send <?= e($coinLabel) ?> to the address below. The order is confirmed after
+                            <?= (int) $method['confirmations'] ?> network confirmation<?= (int) $method['confirmations'] === 1 ? '' : 's' ?>.
+                        </p>
                     </div>
                 </div>
 
-                <?php if ($btcAddress === ''): ?>
-                    <p class="btc-panel__note">
-                        Bitcoin payment details are not configured yet. Please contact support and quote order
+                <?php if ($coinAddress === ''): ?>
+                    <p class="pay-note">
+                        <?= e($method['label']) ?> payment details are not configured yet. Please contact support and quote order
                         <strong><?= e($order['order_number']) ?></strong> before sending any payment.
                     </p>
                 <?php else: ?>
-                    <?php if ($btcAmount !== null): ?>
-                        <div class="btc-amount">
-                            <span class="btc-amount__value"><?= e(number_format($btcAmount, 8, '.', '')) ?> BTC</span>
-                            <span class="btc-amount__fiat"><?= e(money($order['total'])) ?> at <?= e(number_format($btcRate, 2, '.', ',')) ?> <?= e(\App\Support\Site::currency() ?: 'USD') ?>/BTC</span>
+                    <div class="pay-amount">
+                        <div class="pay-amount__main">
+                            <span class="pay-amount__label">Amount to send</span>
+                            <span class="pay-amount__value"><?= e($coinLabel) ?></span>
+                            <span class="pay-amount__fiat">
+                                <?= $coinAmount !== null
+                                    ? 'equals ' . e(money($order['total']))
+                                    : 'The ' . e($method['symbol']) . ' equivalent is confirmed by support before you send.' ?>
+                            </span>
                         </div>
-                    <?php else: ?>
-                        <div class="btc-amount">
-                            <span class="btc-amount__value"><?= e(money($order['total'])) ?></span>
-                            <span class="btc-amount__fiat">The BTC equivalent is confirmed by support before you send.</span>
-                        </div>
-                    <?php endif; ?>
-
-                    <div class="btc-address">
-                        <span class="btc-address__label">Bitcoin address</span>
-                        <div class="btc-address__row">
-                            <code id="btc-address"><?= e($btcAddress) ?></code>
-                            <button type="button" class="btn btn-sm btn-outline-primary" data-copy-target="btc-address">Copy</button>
+                        <div class="pay-amount__network">
+                            <span>Network</span>
+                            <strong><?= e($method['network']) ?></strong>
                         </div>
                     </div>
 
-                    <div class="btc-panel__actions">
-                        <a class="btn btn-mix btn-primary" href="<?= e($bip21) ?>">Open in Bitcoin wallet</a>
+                    <div class="pay-address">
+                        <span class="pay-address__label"><?= e($method['label']) ?> address</span>
+                        <div class="pay-address__row">
+                            <code id="order-pay-address"><?= e($coinAddress) ?></code>
+                            <button type="button" class="btn btn-sm btn-outline-primary" data-copy-target="order-pay-address">Copy</button>
+                        </div>
+                    </div>
+
+                    <div class="pay-panel__actions">
+                        <?php if ($coinUri !== ''): ?>
+                            <a class="btn btn-mix btn-primary" href="<?= e($coinUri) ?>">Open in <?= e($method['label']) ?> wallet</a>
+                        <?php endif; ?>
+                        <a class="btn btn-mix btn-primary" href="<?= e(url('checkout/payment', ['orderId' => $order['order_number']])) ?>">Continue to payment</a>
                         <a class="btn btn-mix btn-outline-primary" href="<?= e(url('contact')) ?>">Need help?</a>
                     </div>
 
-                    <ol class="btc-steps">
-                        <li>Open your Bitcoin wallet and choose <strong>Send</strong>.</li>
-                        <li>Paste the address above and enter the exact BTC amount.</li>
+                    <ol class="pay-steps">
+                        <li>Open your <?= e($method['label']) ?> wallet and choose <strong>Send</strong>.</li>
+                        <li>Paste the address above and enter <?= $coinAmount !== null ? 'exactly ' . e($coinLabel) : 'the amount confirmed by support' ?>.</li>
                         <li>Send the transaction and keep the transaction ID.</li>
-                        <li>We mark the order paid after <?= (int) ($btc['confirmations'] ?? 2) ?> confirmation<?= (int) ($btc['confirmations'] ?? 2) === 1 ? '' : 's' ?>.</li>
+                        <li>We confirm the order after <?= (int) $method['confirmations'] ?> network confirmation<?= (int) $method['confirmations'] === 1 ? '' : 's' ?>.</li>
                     </ol>
 
-                    <p class="btc-warning">
-                        Send only Bitcoin (BTC) on the Bitcoin network to this address.
+                    <p class="pay-warning">
+                        Send only <?= e($method['label']) ?> (<?= e($method['symbol']) ?>) on the <?= e($method['network']) ?> network to this address.
                         Payments in any other asset or network cannot be recovered.
                     </p>
                 <?php endif; ?>

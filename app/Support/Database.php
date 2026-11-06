@@ -34,6 +34,12 @@ class Database
             PDO::ATTR_EMULATE_PREPARES => false,
         ]);
 
+        // Store and read timestamps in UTC only. Without this MySQL writes
+        // CURRENT_TIMESTAMP in the server's local zone while PHP (and the
+        // payment expiry) work in UTC, which made a payment window look like it
+        // closed before the order was placed.
+        self::$connection->exec("SET time_zone = '+00:00'");
+
         return self::$connection;
     }
 

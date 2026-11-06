@@ -91,7 +91,7 @@
                         <h3>Order summary</h3>
                         <div class="summary-row"><span>Subtotal</span><span><?= money($subtotal) ?></span></div>
                         <?php if ($discount > 0): ?>
-                            <div class="summary-row"><span>Discount (<?= e($coupon['code']) ?>)</span><span>-<?= money($discount) ?></span></div>
+                            <div class="summary-row"><span>Discount<?= $coupon ? ' (' . e($coupon['code']) . ')' : '' ?></span><span>-<?= money($discount) ?></span></div>
                         <?php endif; ?>
                         <div class="summary-row">
                             <span>Shipping</span>
@@ -108,13 +108,28 @@
                         <?php else: ?>
                             <form action="<?= e(url('cart/coupon')) ?>" method="post" class="coupon-form">
                                 <?= csrf_field() ?>
-                                <input type="text" name="code" placeholder="Coupon code">
-                                <button class="btn btn-sm btn-outline-primary" type="submit">Apply</button>
+                                <input type="text" name="code" placeholder="Enter promo code">
+                                <button class="btn btn-sm btn-outline-primary" type="submit" name="apply_discount" value="1">Apply</button>
                             </form>
                         <?php endif; ?>
 
-                        <a class="btn btn-mix btn-primary btn-block" href="<?= e(url('checkout')) ?>">Checkout</a>
-                        <p class="small muted mt-2">Free shipping on orders over <?= money(config('app.free_shipping_threshold')) ?>.</p>
+                        <?php $meetsMinimum = \App\Support\Cart::meetsMinimumOrder(); ?>
+                        <?php if ($meetsMinimum): ?>
+                            <a class="btn btn-mix btn-primary btn-block" href="<?= e(url('checkout')) ?>">Checkout</a>
+                        <?php else: ?>
+                            <span class="btn btn-mix btn-primary btn-block disabled" aria-disabled="true">Checkout</span>
+                        <?php endif; ?>
+                        <p class="small muted mt-2">
+                            Minimum order <?= money(\App\Support\Cart::minimumOrder()) ?>.
+                            <?php if (!$meetsMinimum): ?>
+                                Add <?= money(\App\Support\Cart::minimumOrderShortfall()) ?> more to check out.
+                            <?php endif; ?>
+                            Orders of <?= money(config('app.bulk_discount_threshold')) ?> or more get
+                            <?= money(config('app.bulk_discount_amount')) ?> off and free shipping with promo code
+                            <strong><?= e(\App\Support\Cart::promoCode()) ?></strong>.
+                            USA domestic <?= money(config('app.shipping_domestic_rate')) ?>,
+                            international <?= money(config('app.shipping_international_rate')) ?>.
+                        </p>
                     </div>
                 </aside>
             </div>

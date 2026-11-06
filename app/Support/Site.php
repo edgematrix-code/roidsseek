@@ -116,14 +116,16 @@ final class Site
     /**
      * Path (relative to the host) for an application route.
      *
-     * When clean URLs are enabled the readable form is emitted; otherwise the
-     * legacy `index.php?r=` form is preserved so existing links keep working.
+     * Clean URLs are the shipped default and use their own vocabulary
+     * (/shop/{slug}, /collections/{slug}, /learn/{slug}, ...). The query form
+     * `index.php?p=<route>` is only a fallback for hosts without the rewrite
+     * rules.
      */
     public static function routePath(string $route = '', array $params = []): string
     {
         if (!self::get('cleanUrls')) {
-            // Keep route slashes readable (r=cart/add, not r=cart%2Fadd).
-            $query = $route !== '' ? 'r=' . $route : '';
+            // Keep route slashes readable (p=cart/add, not p=cart%2Fadd).
+            $query = $route !== '' ? route_param() . '=' . $route : '';
             if ($params !== []) {
                 $query .= ($query === '' ? '' : '&') . http_build_query($params);
             }
@@ -133,26 +135,27 @@ final class Site
 
         $segments = match ($route) {
             '' => [],
-            'all' => ['products'],
-            'search' => ['search'],
-            'sale' => ['sale'],
-            'faq' => ['faq'],
-            'articles' => ['articles'],
-            'events' => ['events'],
+            'all' => ['catalogue'],
+            'search' => ['find'],
+            'sale' => ['deals'],
+            'faq' => ['help'],
+            'articles' => ['learn'],
+            'events' => ['news'],
             'contact' => ['contact'],
-            'article' => ['articles', (string) ($params['slug'] ?? '')],
-            'page' => ['pages', (string) ($params['slug'] ?? '')],
-            'product' => ['product', (string) ($params['slug'] ?? '')],
-            'category' => ['category', (string) ($params['slug'] ?? '')],
-            'brand' => ['brand', (string) ($params['slug'] ?? '')],
-            'goal' => ['goal', (string) ($params['slug'] ?? '')],
-            'shipping' => ['shipping', (string) ($params['slug'] ?? '')],
+            'article' => ['learn', (string) ($params['slug'] ?? '')],
+            'page' => ['info', (string) ($params['slug'] ?? '')],
+            'product' => ['shop', (string) ($params['slug'] ?? '')],
+            'category' => ['collections', (string) ($params['slug'] ?? '')],
+            'brand' => ['brands', (string) ($params['slug'] ?? '')],
+            'goal' => ['goals', (string) ($params['slug'] ?? '')],
+            'shipping' => ['delivery', (string) ($params['slug'] ?? '')],
             'order' => ['orders', (string) ($params['number'] ?? '')],
             'account/order' => ['account', 'orders', (string) ($params['number'] ?? '')],
+            'reviews' => ['reviews'],
             default => array_values(array_filter(explode('/', $route), static fn ($part) => $part !== '')),
         };
 
-        if (in_array($route, ['product', 'category', 'brand', 'goal', 'shipping'], true)) {
+        if (in_array($route, ['product', 'category', 'brand', 'goal', 'shipping', 'article', 'page'], true)) {
             unset($params['slug']);
         }
         if ($route === 'order') {
@@ -201,28 +204,44 @@ final class Site
         $first = $segments[0] ?? '';
         $second = $segments[1] ?? '';
 
-        if ($first === 'products') {
+        // Public, indexable URLs.
+        if ($first === 'catalogue') {
             return ['all', []];
         }
-        if ($first === 'articles' && $second !== '') {
+        if ($first === 'find') {
+            return ['search', []];
+        }
+        if ($first === 'deals') {
+            return ['sale', []];
+        }
+        if ($first === 'help') {
+            return ['faq', []];
+        }
+        if ($first === 'news' && $second === '') {
+            return ['events', []];
+        }
+        if ($first === 'learn' && $second !== '') {
             return ['article', ['slug' => $second]];
         }
-        if ($first === 'pages' && $second !== '') {
+        if ($first === 'learn') {
+            return ['articles', []];
+        }
+        if ($first === 'info' && $second !== '') {
             return ['page', ['slug' => $second]];
         }
-        if ($first === 'product' && $second !== '') {
+        if ($first === 'shop' && $second !== '') {
             return ['product', ['slug' => $second]];
         }
-        if ($first === 'category' && $second !== '') {
+        if ($first === 'collections' && $second !== '') {
             return ['category', ['slug' => $second]];
         }
-        if ($first === 'brand' && $second !== '') {
+        if ($first === 'brands' && $second !== '') {
             return ['brand', ['slug' => $second]];
         }
-        if ($first === 'goal' && $second !== '') {
+        if ($first === 'goals' && $second !== '') {
             return ['goal', ['slug' => $second]];
         }
-        if ($first === 'shipping' && $second !== '') {
+        if ($first === 'delivery' && $second !== '') {
             return ['shipping', ['slug' => $second]];
         }
         if ($first === 'orders' && $second !== '') {
@@ -232,9 +251,21 @@ final class Site
             return ['account/order', ['number' => $segments[2]]];
         }
 
-        $allowed = ['search', 'sale', 'faq', 'articles', 'events', 'contact', 'location', 'cart',
-            'checkout', 'login', 'register', 'logout', 'forgot', 'reset', 'account',
-            'newsletter', 'review', 'admin'];
+        // The transfer confirmation posts here; without this explicit case the
+        // path would be read as an order id and 404.
+        if ($first === 'checkout' && $second === 'payment' && ($segments[2] ?? '') === 'confirm') {
+            return ['checkout/payment/confirm', []];
+        }
+        if ($first === 'checkout' && $second === 'payment' && isset($segments[2])) {
+            return ['checkout/payment', ['orderId' => $segments[2]]];
+        }
+        if ($first === 'checkout' && $second === 'success' && isset($segments[2])) {
+            return ['checkout/success', ['orderId' => $segments[2]]];
+        }
+
+        $allowed = ['catalogue', 'find', 'deals', 'help', 'learn', 'news', 'contact', 'location',
+            'cart', 'checkout', 'login', 'register', 'logout', 'forgot', 'reset', 'account',
+            'newsletter', 'review', 'reviews', 'admin'];
         if (!in_array($first, $allowed, true)) {
             return ['__not_found__', []];
         }
@@ -281,7 +312,7 @@ final class Site
         $check('address', 'SITE_ADDRESS_STREET + SITE_CITY + SITE_ADDRESS_POSTAL', self::filled($config['address']), 'Pharmacy / LocalBusiness schema, location page');
         $check('phone', 'SITE_PHONE', self::filled($config['phone']), 'Pharmacy schema telephone, contact details');
         $check('openingHours', 'SITE_OPENING_HOURS', self::filled($config['openingHours']), 'Pharmacy opening hours');
-        $check('email', 'SITE_EMAIL', self::filled($config['email']), 'Organization email, contact page');
+        $check('email', 'SITE_EMAIL', self::filled($config['email']), 'Contact form routes to admin instead of email');
         $check('logoPath', 'SITE_LOGO_PATH', self::filled($config['logoPath']), 'Organization logo, Open Graph fallback');
         $check('defaultOgImage', 'SITE_OG_IMAGE', self::filled($config['defaultOgImage']), 'Default Open Graph image');
         $check('pharmacyLicenceNumber', 'REG_STATE_LICENCE', self::filled($config['regulatory']['pharmacyLicenceNumber'] ?? ''), 'Licence block on the page and in structured data');

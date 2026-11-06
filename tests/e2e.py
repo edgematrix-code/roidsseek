@@ -21,11 +21,11 @@ def check(name, ok, detail=""):
 
 
 def get(s, route, **kw):
-    return s.get(BASE, params={"r": route, **kw}, timeout=30)
+    return s.get(BASE, params={"p": route, **kw}, timeout=30)
 
 
 def post(s, route, data, **kw):
-    return s.post(BASE, params={"r": route}, data=data, timeout=30)
+    return s.post(BASE, params={"p": route}, data=data, timeout=30)
 
 
 def csrf(html):
@@ -64,7 +64,7 @@ for route, params in public.items():
 
 # product + article detail
 r = get(s, "all")
-slug = re.search(r"[?&]r=product&(?:amp;)?slug=([a-z0-9\-]+)", r.text)
+slug = re.search(r'href="[^"]*/shop/([a-z0-9\-]+)"', r.text)
 check("listing has product links", bool(slug), r.text[:200])
 if slug:
     r = get(s, "product", slug=slug.group(1))
@@ -72,7 +72,7 @@ if slug:
     check("product detail has add-to-cart", "cart/add" in r.text)
 
 r = get(s, "articles")
-art = re.search(r'article\?slug=([a-z0-9\-]+)', r.text) or re.search(r'r=article&amp;slug=([a-z0-9\-]+)', r.text)
+art = re.search(r'href="[^"]*/learn/([a-z0-9\-]+)"', r.text)
 check("articles list has article links", bool(art), r.text[:300])
 if art:
     r = get(s, "article", slug=art.group(1))
@@ -182,10 +182,12 @@ if pid:
         "shipping_country": "USA", "notes": "leave at door",
         "payment_method": "crypto",
     }
+    num = None
     r = post(ch, "checkout", payload)
     check("checkout post ok", r.status_code in (302, 200), (r.status_code, r.text[:400]))
-    m = re.search(r"number=([A-Za-z0-9\-]+)", r.url)
-    check("checkout redirects to order", bool(m), (r.url, r.text[:300]))
+    # Bitcoin is the only method, so a placed order lands on the payment page.
+    m = re.search(r"orderId=(RS-[A-Za-z0-9\-]+)", r.url)
+    check("checkout redirects to payment", bool(m), (r.url, r.text[:300]))
     if m:
         num = m.group(1)
         r = get(ch, "order", number=num)
@@ -194,7 +196,8 @@ if pid:
         g = get(ch, "order", number=num)
         check("order page by number", g.status_code == 200 and num in g.text, g.status_code)
         ORDER_NUM = num
-print("ORDER_NUMBER=" + num)
+if num:
+    print("ORDER_NUMBER=" + num)
     # guest checkout wrote an order -> verify in account for logged-in user later
 
 # contact + newsletter + review
@@ -242,7 +245,7 @@ r = get(a, "admin/product")
 t = csrf(r.text)
 pslug = f"e2e-product-{int(time.time())}"
 r = post(a, "admin/product/save", {
-    "_token": t, "name": "E2E Product", "slug": pslug, "price": "99.50",
+    "_token": t, "name": "E2E Product", "slug": pslug, "price": "109.50",
     "stock": "7", "short_description": "Test product", "description": "Long description",
     "is_active": "1", "is_featured": "1", "category_id": "1", "brand_id": "1",
     "goal_id": "1", "sku": "E2E-1",
@@ -252,7 +255,7 @@ check("product created", pslug in r.text or "E2E Product" in r.text, r.text[:400
 
 # edit product
 row = next((c for c in r.text.split('<tr') if 'E2E Product' in c), '')
-m3 = re.search(r'r=admin/product&(?:amp;)?id=(\d+)', row)
+m3 = re.search(r'/admin/product\?id=(\d+)', row)
 if m3:
     r = get(a, "admin/product", id=m3.group(1))
     t = csrf(r.text)
@@ -273,7 +276,7 @@ if m3:
 # order status update
 r = get(a, "admin/orders")
 row = next((c for c in r.text.split('<tr') if ORDER_NUM in c), '')
-oid = re.search(r'r=admin/order&(?:amp;)?id=(\d+)', row)
+oid = re.search(r'/admin/order\?id=(\d+)', row)
 if oid:
     r = get(a, "admin/order", id=oid.group(1))
     check("admin order detail 200", r.status_code == 200, r.status_code)

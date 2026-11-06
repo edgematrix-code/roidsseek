@@ -77,12 +77,14 @@ messages, orders and customer accounts.
    `index.php` only if the extra protection is not needed.
 
    For Apache, point the document root at this directory — `.htaccess`
-   already blocks dotfiles and source directories, and `index.php` handles
-   every route through `?r=<route>`. For nginx add:
+   already blocks dotfiles and source directories and rewrites unknown paths
+   to `index.php`, which serves the path URLs below. For nginx the rewrite has
+   to be added by hand, or every clean URL returns 404:
 
    ```nginx
    location ~ /\.(?!well-known) { deny all; }
    location ~ ^/(app|config|database|tests|legacy)/ { deny all; }
+   location / { try_files $uri $uri/ /index.php?$query_string; }
    ```
 
 ## Demo accounts
@@ -121,6 +123,32 @@ Slugs are generated from the name/title when left blank and duplicates are
 rejected. `/admin.php` is a direct entry point that boots the same router and
 shows the dashboard.
 
+## URLs
+
+Every link, canonical, `og:url`, sitemap entry and feed link is built by
+`Site::routePath()`, so the paths below are the only public URL forms:
+
+| Route | URL |
+|-------|-----|
+| `''` | `/` |
+| `all` | `/catalogue` |
+| `search` | `/find?q=` |
+| `sale` | `/deals` |
+| `category` | `/collections/{slug}` |
+| `brand` | `/brands/{slug}` |
+| `goal` | `/goals/{slug}` |
+| `product` | `/shop/{slug}` |
+| `articles` / `article` | `/learn` / `/learn/{slug}` |
+| `shipping` | `/delivery/{slug}` |
+| `faq` | `/help` |
+| `events` | `/news` |
+| `page` | `/info/{slug}` |
+| `order` | `/orders/{order-number}` |
+
+Application routes (`cart`, `checkout`, `login`, `register`, `account`,
+`admin`, ...) keep their names as paths. Legacy query URLs and the front
+controller file itself (`/index.php`) 301 to the path form in one hop.
+
 ## Behaviour notes
 
 - Sessions are cookie based (`roidsseek_session`), CSRF tokens protect every
@@ -132,7 +160,19 @@ shows the dashboard.
   wallet link and the configured confirmation count. `BTC_USD_RATE` is
   optional: without it the BTC amount is confirmed by support.
 - Cart contents live in the session, priced from the database on every
-  request. Shipping is free above $399, otherwise a flat $25.
+  request. No product is sold below `MIN_PRODUCT_PRICE` ($100) and an order
+  needs a `MIN_ORDER_TOTAL` ($500) basket subtotal. Delivery is $25
+  international or $30 US domestic (domestic costs 20% more).
+- $100 is a minimum, not a flat price: `App\Support\Pricing` lifts the
+  sub-floor band of the imported catalogue onto the floor while keeping its
+  spread, so figures vary across the catalogue. Products the import never
+  priced are priced from their closest peers (same substance, then same brand)
+  and every priced product is in stock, so nothing is listed as sold out.
+- The promo code `ROIDSSEEK2026` (`PROMO_CODE`) on a basket of $1,000 or more
+  (`BULK_DISCOUNT_THRESHOLD`) takes `BULK_DISCOUNT_AMOUNT` ($200) off and
+  makes delivery free. It is a normal coupon row, so it is validated like any
+  other coupon and counted at checkout; dropping the basket below the
+  threshold withdraws the offer again.
 - Reviews are submitted as `pending` and only appear once approved in
   `admin/reviews`.
 - There is no mail transport configured. `forgot` generates a reset link and
@@ -154,8 +194,22 @@ npm run seo:gaps           # content gap report
 ```
 
 `/robots.txt`, `/sitemap.xml`, `/sitemap-*.xml` and `/feed/products.xml` are
-served by `SeoController`. Clean URLs and canonical-host redirects are off by
-default; enable them with `SEO_CLEAN_URLS` and `SEO_CANONICAL_REDIRECT`.
+served by `SeoController`. Path URLs are the default (`SEO_CLEAN_URLS=true`);
+the query form `index.php?p=<route>` and the older `index.php?r=<route>` form
+both 301 to the path form, and `SEO_CANONICAL_REDIRECT` pins the host.
+
+### Deindexing
+
+The site is indexable by default. `SEO_NOINDEX=true` opts the whole site out of
+search: `Seo::page()` then forces `<meta name="robots" content="noindex,nofollow">`
+on every page, and `index.php` sends `X-Robots-Tag: noindex, nofollow` on every
+response. For non-HTML files (PDFs, images, fonts) add the header at the server
+level - `.htaccess` does it for Apache, and for nginx add
+`add_header X-Robots-Tag "noindex, nofollow" always;` to the `server` block.
+
+`robots.txt` keeps crawling open on purpose: Google has to fetch a page to see
+the `noindex` tag, so it must never contain `Disallow: /`. Remove the flag (and
+the server header) to let search engines back in.
 
 ## Tests
 

@@ -1,0 +1,1 @@
+We prototype read-only mode. Test once per session.

@@ -19,11 +19,11 @@ def check(name, ok, detail=""):
 
 
 def get(s, route, **kw):
-    return s.get(BASE, params={"r": route, **kw}, timeout=30, allow_redirects=True)
+    return s.get(BASE, params={"p": route, **kw}, timeout=30, allow_redirects=True)
 
 
 def post(s, route, data, **kw):
-    return s.post(BASE, params={"r": route}, data=data, timeout=30, allow_redirects=True)
+    return s.post(BASE, params={"p": route}, data=data, timeout=30, allow_redirects=True)
 
 
 def csrf(html):
@@ -48,7 +48,7 @@ check("customer blocked from admin products", "Admin Dashboard" not in r.text an
 # unauthenticated account redirects to login
 anon = requests.Session()
 r = get(anon, "account")
-check("guest redirected from account to login", "r=login" in r.url and "Log In" in r.text and "My Account" not in r.text, r.text[:200])
+check("guest redirected from account to login", "/login" in r.url and "Log In" in r.text and "My Account" not in r.text, r.text[:200])
 
 # CSRF: posting login without token must not authenticate
 nocsrf = requests.Session()
@@ -91,7 +91,7 @@ if cid:
 # password reset flow
 reset = requests.Session()
 r = post(reset, "forgot", {"_token": csrf(get(reset, "forgot").text), "email": "customer@example.com"})
-link = re.search(r'r=reset&(?:amp;)?token=([a-f0-9]{64})', r.text)
+link = re.search(r'/reset\?token=([a-f0-9]{64})', r.text)
 check("forgot password generates reset link", bool(link), r.text[:300])
 if link:
     r = get(reset, "reset", token=link.group(1))
@@ -100,7 +100,7 @@ if link:
     newpw = "ResetPass!2026"
     r = post(reset, "reset", {"_token": t, "token": link.group(1),
                               "password": newpw, "password_confirmation": newpw})
-    check("reset post completes", "r=login" in r.url and "Log In" in r.text, r.text[:200])
+    check("reset post completes", "/login" in r.url and "Log In" in r.text, r.text[:200])
     j = requests.Session()
     r = login(j, "customer@example.com", newpw)
     check("login with reset password", "Demo Customer" in r.text, r.text[:200])

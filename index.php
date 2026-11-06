@@ -10,8 +10,22 @@ use App\Controllers\AdminController;
 use App\Controllers\AuthController;
 use App\Controllers\CartController;
 use App\Controllers\CheckoutController;
+use App\Controllers\PaymentController;
 use App\Controllers\SeoController;
 use App\Controllers\StoreController;
+
+// Sitewide deindex (config/site.php -> noindexSite), off unless SEO_NOINDEX is
+// turned on. The header is set before routing so redirects, not-found pages and
+// anything the application serves itself carry it too.
+if ((bool) \App\Support\Site::get('noindexSite', false)) {
+    header('X-Robots-Tag: noindex, nofollow');
+}
+
+// /admin.php is a second entry point: keep an explicit route, otherwise show
+// the dashboard.
+if (basename((string) ($_SERVER['SCRIPT_NAME'] ?? '')) === 'admin.php' && !isset($_GET[route_param()])) {
+    $_GET[route_param()] = 'admin';
+}
 
 enforce_canonical_request();
 normalize_request_path();
@@ -83,6 +97,14 @@ try {
             (new CartController())->coupon();
             break;
 
+        case 'cart/shipping':
+            (new CartController())->shipping();
+            break;
+
+        case 'cart/modal/close':
+            (new CartController())->closeModal();
+            break;
+
         // ------------------------------------------------------------ checkout
         case 'checkout':
             $checkout = new CheckoutController();
@@ -91,6 +113,18 @@ try {
 
         case 'order':
             (new CheckoutController())->confirmation((string) ($_GET['number'] ?? ''));
+            break;
+
+        case 'checkout/payment':
+            (new PaymentController())->show((string) ($_GET['orderId'] ?? ''));
+            break;
+
+        case 'checkout/payment/confirm':
+            (new PaymentController())->confirm();
+            break;
+
+        case 'checkout/success':
+            (new PaymentController())->success((string) ($_GET['orderId'] ?? ''));
             break;
 
         // ---------------------------------------------------------------- auth
@@ -158,6 +192,10 @@ try {
 
         case 'contact':
             $store->contact();
+            break;
+
+        case 'reviews':
+            $store->reviews();
             break;
 
         case 'location':

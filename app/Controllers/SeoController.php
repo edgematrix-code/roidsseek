@@ -8,8 +8,9 @@ use App\Support\Database;
 use App\Support\Site;
 
 /**
- * Machine-readable SEO endpoints: robots.txt, the sitemap index and its
- * per-section sitemaps, and the Google Merchant Center feed.
+ * Machine-readable SEO endpoints: robots.txt, the sitemap (one flat file with
+ * every indexable URL), the per-section sitemaps, and the Google Merchant
+ * Center feed.
  *
  * Every URL is built from the configured siteUrl, never from request headers.
  */
@@ -30,7 +31,8 @@ class SeoController
         ];
 
         // Pages that return 200 with a noindex meta tag stay crawlable: a
-        // Disallow rule would hide the noindex from Google. Only the admin
+        // Disallow rule would hide the noindex from Google, so a `Disallow: /`
+        // here would stop Google from ever seeing those tags. Only the admin
         // area, mutation endpoints and faceted permutations are disallowed.
         foreach (['admin', 'newsletter', 'review'] as $route) {
             $lines[] = 'Disallow: ' . Site::routePath($route);
@@ -38,6 +40,10 @@ class SeoController
         foreach (['sort', 'brand', 'substance', 'max_price', 'stock', 'location', 'keyword'] as $param) {
             $lines[] = 'Disallow: /*?*' . $param . '=';
         }
+
+        // Checkout payment routes should not be crawled
+        $lines[] = 'Disallow: /checkout/payment/';
+        $lines[] = 'Disallow: /checkout/success';
 
         if (Site::siteUrl() !== '') {
             $lines[] = '';
@@ -47,46 +53,110 @@ class SeoController
         echo implode("\n", $lines) . "\n";
     }
 
+    /**
+     * The sitemap itself: one flat <urlset> listing every public URL of this
+     * site, each with a priority, today's lastmod and a changefreq.
+     */
     public function sitemapIndex(): void
     {
-        $lastmods = [
-            'products' => (string) Database::value(
-                'SELECT MAX(updated_at) FROM products WHERE is_active = 1 AND is_restricted = 0 AND discontinued = 0'
-            ),
-            'articles' => (string) Database::value('SELECT MAX(published_at) FROM articles WHERE is_published = 1'),
-        ];
+        // Deindex build: every <lastmod> is the day this sitemap was requested,
+        // so Google treats each URL as changed and re-reads it.
+        $today = gmdate('Y-m-d');
+        $live = 'p.is_active = 1 AND p.is_restricted = 0 AND p.discontinued = 0';
+        $urls = [];
 
-        $sections = ['products', 'categories', 'brands', 'goals', 'articles', 'pages', 'static'];
-        $entries = [];
-        foreach ($sections as $section) {
-            $chunks = $section === 'products' ? $this->productChunks() : 1;
-            for ($page = 1; $page <= $chunks; $page++) {
-                $loc = Site::absolute($this->sitemapPath($section, $page));
-                $entry = '  <sitemap>' . "\n" . '    <loc>' . $this->xml($loc) . '</loc>';
-                $lastmod = $lastmods[$section] ?? '';
-                if ($lastmod !== '' && $lastmod !== '0') {
-                    $entry .= "\n" . '    <lastmod>' . $this->xml($this->isoDate($lastmod)) . '</lastmod>';
-                }
-                $entry .= "\n  </sitemap>";
-                $entries[] = $entry;
+        // Home, then the fixed content pages.
+        $urls[] = $this->urlEntry(Site::absolute(''), '1.0', $today);
+        $urls[] = $this->urlEntry(Site::absoluteRoute('all'), '0.9', $today);
+        $urls[] = $this->urlEntry(Site::absoluteRoute('sale'), '0.9', $today);
+        foreach (['articles', 'faq', 'events', 'contact'] as $route) {
+            $urls[] = $this->urlEntry(Site::absoluteRoute($route), '0.9', $today);
+        }
+
+        foreach (Database::all('SELECT slug FROM pages ORDER BY id') as $row) {
+            $urls[] = $this->urlEntry(
+                Site::absoluteRoute('page', ['slug' => (string) $row['slug']]),
+                '0.9',
+                $today
+            );
+        }
+
+        foreach (Database::all('SELECT slug, published_at FROM articles WHERE is_published = 1 ORDER BY published_at DESC') as $row) {
+            $urls[] = $this->urlEntry(
+                Site::absoluteRoute('article', ['slug' => (string) $row['slug']]),
+                '0.9',
+                $today
+            );
+        }
+
+        // Shipping lines, then the catalogue listings, then the products.
+        foreach (['usa', 'international'] as $slug) {
+            $urls[] = $this->urlEntry(Site::absoluteRoute('shipping', ['slug' => $slug]), '0.8', $today);
+        }
+
+        $listings = [
+            "SELECT c.slug FROM categories c WHERE EXISTS (
+                SELECT 1 FROM product_category rel JOIN products p ON p.id = rel.product_id
+                WHERE rel.category_id = c.id AND $live
+            ) ORDER BY c.sort_order",
+            "SELECT b.slug FROM brands b WHERE EXISTS (
+                SELECT 1 FROM products p WHERE p.brand_id = b.id AND $live
+            ) ORDER BY b.name",
+            "SELECT g.slug FROM goals g WHERE EXISTS (
+                SELECT 1 FROM product_goal rel JOIN products p ON p.id = rel.product_id
+                WHERE rel.goal_id = g.id AND $live
+            ) ORDER BY g.name",
+        ];
+        foreach (['category', 'brand', 'goal'] as $index => $route) {
+            foreach (Database::all($listings[$index]) as $row) {
+                $urls[] = $this->urlEntry(
+                    Site::absoluteRoute($route, ['slug' => (string) $row['slug']]),
+                    '0.8',
+                    $today
+                );
             }
         }
 
+        foreach (Database::all("SELECT slug, updated_at FROM products p WHERE $live ORDER BY p.id") as $row) {
+            $urls[] = $this->urlEntry(
+                Site::absoluteRoute('product', ['slug' => (string) $row['slug']]),
+                '0.8',
+                $today
+            );
+        }
+
+        // Listed by request. Sitemaps have no favicon field and Google reads
+        // the home page <link rel="icon">, but the URL is valid and harmless.
+        $urls[] = $this->urlEntry(Site::absolute('favicon.ico'), '0.5', $today);
+
         $this->xmlResponse(
             '<?xml version="1.0" encoding="UTF-8"?>' . "\n"
-            . '<sitemapindex xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">' . "\n"
-            . implode("\n", $entries) . "\n"
-            . '</sitemapindex>' . "\n"
+            . '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">' . "\n"
+            . implode("\n", $urls) . "\n"
+            . '</urlset>' . "\n"
         );
+    }
+
+    /** One <url> entry with the tags the reference sitemap used. */
+    private function urlEntry(string $loc, string $priority, string $lastmod, string $changefreq = 'weekly'): string
+    {
+        $entry = '  <url>' . "\n"
+            . '    <loc>' . $this->xml($loc) . '</loc>' . "\n"
+            . '    <priority>' . $priority . '</priority>';
+        if ($lastmod !== '') {
+            $entry .= "\n" . '    <lastmod>' . $this->xml($lastmod) . '</lastmod>';
+        }
+
+        return $entry . "\n" . '    <changefreq>' . $changefreq . '</changefreq>' . "\n" . '  </url>';
     }
 
     public function sitemap(string $section, int $page = 1): void
     {
         $urls = match ($section) {
             'products' => $this->productUrls($page),
-            'categories' => $this->listingUrls('category', 'categories', 'c.sort_order'),
-            'brands' => $this->listingUrls('brand', 'brands', 'b.name'),
-            'goals' => $this->listingUrls('goal', 'goals', 'g.name'),
+            'categories' => $this->listingUrls('category', 'categories', 't.sort_order'),
+            'brands' => $this->listingUrls('brand', 'brands', 't.name'),
+            'goals' => $this->listingUrls('goal', 'goals', 't.name'),
             'articles' => $this->articleUrls(),
             'pages' => $this->pageUrls(),
             'static' => $this->staticUrls(),
@@ -131,7 +201,15 @@ class SeoController
              ORDER BY p.id"
         );
 
-        $shipping = (float) config('app.shipping_flat_rate', 0);
+        // Feed prices follow the target country: US domestic costs 20% more
+        // than the international service.
+        $shippingCountry = (string) Site::get('merchantCountry', '');
+        $shipping = (float) config(
+            \App\Support\Cart::isDomestic($shippingCountry) || $shippingCountry === ''
+                ? 'app.shipping_domestic_rate'
+                : 'app.shipping_international_rate',
+            0
+        );
         $items = [];
         foreach ($products as $product) {
             $price = number_format((float) $product['price'], 2, '.', '');
@@ -154,7 +232,7 @@ class SeoController
                 'g:description' => Site::filled($description) ? $description : (string) $product['name'],
                 'g:link' => Site::absoluteRoute('product', ['slug' => (string) $product['slug']]),
                 'g:image_link' => Site::absolute($image),
-                'g:availability' => (int) $product['stock'] > 0 ? 'in_stock' : 'out_of_stock',
+                'g:availability' => \product_available($product) ? 'in_stock' : 'out_of_stock',
                 'g:price' => $price . ' ' . $currency,
                 'g:condition' => 'new',
                 'g:brand' => (string) ($product['brand_name'] ?? ''),
@@ -299,23 +377,11 @@ class SeoController
             $urls[] = '  <url><loc>' . $this->xml(Site::absoluteRoute($route)) . '</loc></url>';
         }
 
+        // Listed by request. Sitemaps have no favicon field and Google reads
+        // the home page <link rel="icon">, but the URL is valid and harmless.
+        $urls[] = '  <url><loc>' . $this->xml(Site::absolute('favicon.ico')) . '</loc></url>';
+
         return $urls;
-    }
-
-    private function productChunks(): int
-    {
-        $total = (int) Database::value(
-            'SELECT COUNT(*) FROM products WHERE is_active = 1 AND is_restricted = 0 AND discontinued = 0'
-        );
-
-        return max(1, (int) ceil($total / self::MAX_URLS));
-    }
-
-    private function sitemapPath(string $section, int $page): string
-    {
-        return $section === 'products' && $page > 1
-            ? 'sitemap-products-' . $page . '.xml'
-            : 'sitemap-' . $section . '.xml';
     }
 
     private function isoDate(string $value): string

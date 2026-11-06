@@ -4,8 +4,10 @@ declare(strict_types=1);
 
 namespace App\Controllers;
 
+use App\Support\Cart;
 use App\Support\Database;
 use App\Support\JsonLd;
+use App\Support\Mailer;
 use App\Support\Nav;
 use App\Support\Seo;
 use App\Support\Site;
@@ -51,20 +53,20 @@ class StoreController
             ['approved']
         );
 
-        $store = Site::name();
-        $description = Seo::clip((string) Site::get('defaultMetaDescription', ''));
-        if ($description === '') {
-            $description = $store !== ''
-                ? 'Browse the ' . $store . ' catalogue, current offers and product availability.'
-                : 'Browse the catalogue, current offers and product availability.';
-        }
-
         View::render('pages/home', [
             'seo' => [
-                'title' => '', // Seo::page() composes store name + tagline.
-                'description' => $description,
+                'title' => 'Buy Steroids Online | Anabolic Steroids for Sale - RoidsSeek',
+                'description' => 'Buy steroids online at RoidsSeek. We offer high-quality anabolic steroids for sale. Buy steroids online at reasonable prices. Fast and Safe delivery.',
                 'route' => '',
                 'params' => [],
+                'type' => 'article',
+                'keywords' => 'buy steroids online, roidsseek, steroids for sale, steroids online, anabolic steroids for sale, buy steroids',
+                'distribution' => 'global',
+                'classification' => 'Shopping/Health/Fitness/Medicine/e-Commerce',
+                'twitterSite' => 'WWW.ROIDSSEEK.IO',
+                'twitterCard' => 'summary',
+                'image' => false,
+                'viewport' => 'width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no',
             ],
             'featured' => $featured,
             'deals' => $deals,
@@ -107,9 +109,8 @@ class StoreController
             $paramList[] = $filters['max_price'];
         }
 
-        if ($filters['stock'] === 'in') {
-            $whereSql .= ' AND p.stock > 0';
-        }
+        // Every priced product is always sellable, so the "in stock" filter no
+        // longer hides rows whose stock counter happens to be zero.
 
         $total = (int) Database::value(
             "SELECT COUNT(DISTINCT p.id) FROM products p WHERE $whereSql",
@@ -188,6 +189,14 @@ class StoreController
 
     public function product(string $slug): void
     {
+        // Delivery service picked on the product page. Kept in the session so
+        // the cart modal, the cart and checkout all price the order with the
+        // same service.
+        $requestedService = strtolower(trim((string) ($_GET['ship'] ?? '')));
+        if (in_array($requestedService, [Cart::SERVICE_INTERNATIONAL, Cart::SERVICE_DOMESTIC], true)) {
+            Cart::setShippingService($requestedService);
+        }
+
         $product = Database::one(
             'SELECT p.*, b.name AS brand_name, b.slug AS brand_slug
              FROM products p LEFT JOIN brands b ON b.id = p.brand_id
@@ -267,7 +276,8 @@ class StoreController
         }
 
         $restricted = !empty($product['is_restricted']);
-        $inStock = (int) $product['stock'] > 0;
+        $inStock = product_available($product);
+        $hasPrice = product_has_price($product);
         $currency = Site::currency();
 
         $crumbs = [['name' => 'Home', 'url' => Site::absoluteRoute('')]];
@@ -304,11 +314,12 @@ class StoreController
                 'robots' => $restricted
                     ? 'noindex,follow'
                     : Seo::robotsFor('product'),
-                'product' => [
-                    'price' => number_format((float) $product['price'], 2, '.', ''),
-                    'currency' => $currency,
+                // Unpriced rows carry no price meta: "$0.00" is not a price.
+                'product' => array_filter([
+                    'price' => $hasPrice ? number_format((float) $product['price'], 2, '.', '') : null,
+                    'currency' => $hasPrice ? $currency : null,
                     'availability' => $inStock ? 'in stock' : 'out of stock',
-                ],
+                ], static fn ($value) => $value !== null && $value !== ''),
                 'jsonLd' => array_values(array_filter([
                     $productSchema,
                     JsonLd::breadcrumbs($crumbs),
@@ -470,12 +481,12 @@ class StoreController
                     'INSERT INTO contact_messages (name, email, subject, message) VALUES (?, ?, ?, ?)',
                     [$name, $email, $subject, $message]
                 );
+
+                // Messages are saved to the admin inbox, not emailed out.
                 clear_old();
                 flash('success', 'Thanks for reaching out. We reply to every message within 24 hours.');
                 redirect('contact');
             }
-
-            remember_old($_POST);
         }
 
         View::render('pages/contact', [
@@ -571,6 +582,34 @@ class StoreController
                 ])],
             ],
             'address' => $address,
+        ]);
+    }
+
+    public function reviews(): void
+    {
+        $testimonies = glob(APP_ROOT . '/assets/Reviews-Images/testimony-*.jpg');
+        $chatScreenshots = glob(APP_ROOT . '/assets/Reviews-Images/chat-review-*.jpg');
+        $discountImage = glob(APP_ROOT . '/assets/Reviews-Images/discount-image.jpg');
+        $testimonyTwo = glob(APP_ROOT . '/assets/Reviews-Images/testimony-two.jpg');
+
+        // Sort files naturally
+        natsort($testimonies);
+        natsort($chatScreenshots);
+
+        View::render('pages/reviews', [
+            'seo' => [
+                'title' => Seo::withStore('Customer Reviews'),
+                'description' => 'See what our customers say about their experience with RoidsSeek.',
+                'route' => 'reviews',
+                'jsonLd' => [JsonLd::breadcrumbs([
+                    ['name' => 'Home', 'url' => Site::absoluteRoute('')],
+                    ['name' => 'Customer Reviews', 'url' => Site::absoluteRoute('reviews')],
+                ])],
+            ],
+            'testimonies' => array_values($testimonies),
+            'chatScreenshots' => array_values($chatScreenshots),
+            'discountImage' => $discountImage ? array_values($discountImage)[0] : null,
+            'testimonyTwo' => $testimonyTwo ? array_values($testimonyTwo)[0] : null,
         ]);
     }
 

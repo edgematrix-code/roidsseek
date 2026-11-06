@@ -3,7 +3,6 @@ use App\Support\Site;
 
 $address = (array) Site::get('address', []);
 $phone = (string) Site::get('phone', '');
-$email = (string) Site::get('email', '');
 $hours = (string) Site::get('openingHours', '');
 ?>
 <div class="breadcrumb_container">
@@ -44,9 +43,6 @@ $hours = (string) Site::get('openingHours', '');
                         </address>
                         <?php if (Site::filled($phone)): ?>
                             <p><strong>Phone</strong><br><a href="tel:<?= e(preg_replace('/[^0-9+]/', '', $phone) ?? '') ?>"><?= e($phone) ?></a></p>
-                        <?php endif; ?>
-                        <?php if (Site::filled($email)): ?>
-                            <p><strong>Email</strong><br><a href="mailto:<?= e($email) ?>"><?= e($email) ?></a></p>
                         <?php endif; ?>
                     </div>
                     <div class="col-md-6">

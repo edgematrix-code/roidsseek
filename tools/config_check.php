@@ -30,7 +30,7 @@ $configured = [
     'Currency' => Site::currency() !== '' ? Site::currency() : '(unset)',
     'Timezone' => Site::filled(Site::get('timezone')) ? (string) Site::get('timezone') : '(unset)',
     'Physical location' => Site::get('hasPhysicalLocation') ? 'yes' : 'no',
-    'Clean URLs' => Site::get('cleanUrls') ? 'enabled' : 'legacy (?r=) URLs',
+    'Clean URLs' => Site::get('cleanUrls') ? 'enabled (path URLs)' : 'disabled (query ?p= fallback)',
     'Merchant feed' => Site::get('merchantFeed') ? 'enabled' : 'disabled',
 ];
 

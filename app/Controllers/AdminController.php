@@ -21,7 +21,7 @@ class AdminController
         $stats = [
             'products' => (int) Database::value('SELECT COUNT(*) FROM products'),
             'orders' => (int) Database::value('SELECT COUNT(*) FROM orders'),
-            'pending_orders' => (int) Database::value("SELECT COUNT(*) FROM orders WHERE status = 'pending'"),
+            'pending_orders' => (int) Database::value("SELECT COUNT(*) FROM orders WHERE status IN ('pending_payment','pending')"),
             'revenue' => (float) Database::value("SELECT COALESCE(SUM(total), 0) FROM orders WHERE status IN ('paid','shipped','completed')"),
             'customers' => (int) Database::value("SELECT COUNT(*) FROM users WHERE role = 'customer'"),
             'messages' => (int) Database::value('SELECT COUNT(*) FROM contact_messages WHERE is_read = 0'),
@@ -142,6 +142,13 @@ class AdminController
             $errors['sku'] = 'Another product already uses that SKU.';
         }
 
+        // Business rule: no product may be sold for less than the configured
+        // minimum (app.min_product_price, $100 by default).
+        $price = (float) input('price', 0);
+        if ($price < min_product_price()) {
+            $errors['price'] = 'Price must be at least ' . money(min_product_price()) . '.';
+        }
+
         $fields = [
             'sku' => $sku,
             'slug' => $slug,
@@ -153,7 +160,7 @@ class AdminController
             'strength' => trim((string) input('strength', '')),
             'short_description' => trim((string) input('short_description', '')),
             'description' => trim((string) input('description', '')),
-            'price' => (float) input('price', 0),
+            'price' => $price,
             'old_price' => input('old_price') !== '' ? (float) input('old_price') : null,
             'stock' => (int) input('stock', 0),
             'image' => trim((string) input('image', '')) ?: null,
@@ -272,7 +279,7 @@ class AdminController
         $status = (string) ($_GET['status'] ?? '');
         $where = '1 = 1';
         $params = [];
-        if (in_array($status, ['pending', 'paid', 'shipped', 'completed', 'cancelled'], true)) {
+        if (in_array($status, ['pending_payment', 'processing', 'payment_submitted', 'paid', 'failed', 'expired', 'pending', 'shipped', 'completed', 'cancelled'], true)) {
             $where .= ' AND status = ?';
             $params[] = $status;
         }
@@ -281,16 +288,50 @@ class AdminController
         $total = (int) Database::value("SELECT COUNT(*) FROM orders WHERE $where", $params);
         $pager = paginate($total, 20, $page);
 
+        $orders = Database::all(
+            "SELECT * FROM orders WHERE $where ORDER BY created_at DESC
+             LIMIT {$pager['per_page']} OFFSET {$pager['offset']}",
+            $params
+        );
+
+        // Opening the list counts as reading the queue, so the sidebar badge is
+        // cleared on this response instead of lingering for orders on later
+        // pages. Only a genuinely new order raises it again.
+        self::markOrdersRead();
+
         View::render('admin/orders', [
             'title' => 'Orders - Admin',
-            'orders' => Database::all(
-                "SELECT * FROM orders WHERE $where ORDER BY created_at DESC
-                 LIMIT {$pager['per_page']} OFFSET {$pager['offset']}",
-                $params
-            ),
+            'orders' => $orders,
             'pager' => $pager,
             'status' => $status,
         ], 'admin/layout');
+    }
+
+    /**
+     * Stamp `admin_read_at` on unread orders, so they no longer raise the
+     * unread-orders badge in the admin sidebar.
+     *
+     * @param array<int,int> $ids restrict to these orders; empty = every open order
+     */
+    private static function markOrdersRead(array $ids = []): void
+    {
+        $ids = array_values(array_unique(array_filter($ids, static fn (int $id): bool => $id > 0)));
+
+        if ($ids === []) {
+            Database::run(
+                "UPDATE orders SET admin_read_at = UTC_TIMESTAMP()
+                 WHERE admin_read_at IS NULL
+                   AND status NOT IN ('completed', 'cancelled', 'failed', 'expired')"
+            );
+            return;
+        }
+
+        $placeholders = implode(',', array_fill(0, count($ids), '?'));
+        Database::run(
+            "UPDATE orders SET admin_read_at = UTC_TIMESTAMP()
+             WHERE admin_read_at IS NULL AND id IN ({$placeholders})",
+            $ids
+        );
     }
 
     public function order(): void
@@ -300,6 +341,8 @@ class AdminController
             flash('error', 'Order not found.');
             redirect('admin/orders');
         }
+
+        self::markOrdersRead([(int) $order['id']]);
 
         View::render('admin/order', [
             'title' => 'Order ' . $order['order_number'],
@@ -317,7 +360,7 @@ class AdminController
         verify_csrf();
 
         $status = (string) input('status', 'pending');
-        if (!in_array($status, ['pending', 'paid', 'shipped', 'completed', 'cancelled'], true)) {
+        if (!in_array($status, ['pending_payment', 'processing', 'payment_submitted', 'paid', 'failed', 'expired', 'pending', 'shipped', 'completed', 'cancelled'], true)) {
             flash('error', 'Unknown status.');
             redirect('admin/orders');
         }
@@ -395,7 +438,9 @@ class AdminController
 
     public function messages(): void
     {
-        Database::run('UPDATE contact_messages SET is_read = 1 WHERE id = ?', [query_int('read', 0)]);
+        // Opening the inbox marks everything on it as read, which clears the
+        // "new" marks in the list and the sidebar badge on the same response.
+        Database::run('UPDATE contact_messages SET is_read = 1 WHERE is_read = 0 OR id = ?', [query_int('read', 0)]);
         View::render('admin/messages', [
             'title' => 'Messages - Admin',
             'messages' => Database::all('SELECT * FROM contact_messages ORDER BY created_at DESC LIMIT 100'),
@@ -416,14 +461,32 @@ class AdminController
 
     public function reviews(): void
     {
+        $reviews = Database::all(
+            'SELECT r.*, p.name AS product_name, p.slug AS product_slug
+             FROM reviews r JOIN products p ON p.id = r.product_id
+             ORDER BY r.status = ? DESC, r.created_at DESC LIMIT 100',
+            ['pending']
+        );
+
+        // Reading the queue clears the sidebar badge; the review keeps its
+        // pending status until it is approved or rejected.
+        $unread = [];
+        foreach ($reviews as $review) {
+            if (($review['status'] ?? '') === 'pending' && empty($review['admin_read_at'])) {
+                $unread[] = (int) $review['id'];
+            }
+        }
+        if ($unread !== []) {
+            $placeholders = implode(',', array_fill(0, count($unread), '?'));
+            Database::run(
+                "UPDATE reviews SET admin_read_at = UTC_TIMESTAMP() WHERE id IN ({$placeholders})",
+                $unread
+            );
+        }
+
         View::render('admin/reviews', [
             'title' => 'Reviews - Admin',
-            'reviews' => Database::all(
-                'SELECT r.*, p.name AS product_name, p.slug AS product_slug
-                 FROM reviews r JOIN products p ON p.id = r.product_id
-                 ORDER BY r.status = ? DESC, r.created_at DESC LIMIT 100',
-                ['pending']
-            ),
+            'reviews' => $reviews,
         ], 'admin/layout');
     }
 

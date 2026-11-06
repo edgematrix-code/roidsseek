@@ -13,6 +13,8 @@ declare(strict_types=1);
 require __DIR__ . '/../app/bootstrap.php';
 
 use App\Support\Database;
+use App\Support\Payment;
+use App\Support\Pricing;
 
 $fresh = in_array('--fresh', $argv ?? [], true);
 
@@ -125,9 +127,54 @@ $resolveBrand = static function (string $rawName) use (&$brandRows, &$brandIds, 
 };
 
 // ---------------------------------------------------------------- products
+// Prices are taken from the imported catalogue and lifted so the cheapest item
+// sits exactly on MIN_PRODUCT_PRICE while the band keeps its spread, instead of
+// every sub-floor product being stamped with the same figure. Products the
+// source never priced (0.00) are priced from their closest peers - same
+// substance first, then same brand - so the catalogue is varied and sellable.
+$sourcePrices = [];
+foreach ($productsData as $product) {
+    $sourcePrices[] = (float) $product['price'];
+}
+$priceOffset = Pricing::liftOffset($sourcePrices);
+
+$pricePlan = [];
+$peers = ['substance' => [], 'brand' => []];
+foreach ($productsData as $index => $product) {
+    $sourcePrice = (float) $product['price'];
+    if ($sourcePrice <= 0) {
+        continue;
+    }
+    $pricePlan[$index] = Pricing::lift($sourcePrice, $priceOffset);
+    $substance = strtolower(trim((string) $product['substance']));
+    $brand = strtolower(trim((string) $product['brand']));
+    if ($substance !== '') {
+        $peers['substance'][$substance][] = $pricePlan[$index];
+    }
+    if ($brand !== '') {
+        $peers['brand'][$brand][] = $pricePlan[$index];
+    }
+}
+$catalogueMedian = Pricing::median($pricePlan);
+foreach ($productsData as $index => $product) {
+    if (isset($pricePlan[$index])) {
+        continue;
+    }
+    $substance = strtolower(trim((string) $product['substance']));
+    $brand = strtolower(trim((string) $product['brand']));
+    $base = Pricing::median($peers['substance'][$substance] ?? []);
+    if ($base <= 0) {
+        $base = Pricing::median($peers['brand'][$brand] ?? []);
+    }
+    if ($base <= 0) {
+        $base = $catalogueMedian;
+    }
+    $pricePlan[$index] = Pricing::derive((string) ($product['sku'] ?: $product['slug']), $base);
+}
+
 $usedSlugs = [];
 $inserted = 0;
-foreach ($productsData as $product) {
+foreach ($productsData as $index => $product) {
     $slug = $product['slug'] ?: $slugify($product['name']) . '-' . $product['id'];
     while (isset($usedSlugs[$slug])) {
         $slug .= '-' . $product['id'];
@@ -135,7 +182,11 @@ foreach ($productsData as $product) {
     $usedSlugs[$slug] = true;
 
     $brandId = $product['brand'] !== '' ? $resolveBrand($product['brand']) : null;
-    $oldPrice = $product['old_price'] !== null && $product['old_price'] > $product['price'] ? $product['old_price'] : null;
+    $price = (float) ($pricePlan[$index] ?? 0);
+    // Anything for sale is in stock; a priced product never seeds as sold out.
+    $stock = (int) $product['stock'];
+    $stock = $price > 0 ? max(1, $stock) : max(0, $stock);
+    $oldPrice = $product['old_price'] !== null && (float) $product['old_price'] > $price ? $product['old_price'] : null;
 
     $description = trim(sprintf(
         "%s is supplied by %s. Each pack is sealed, batch-coded and inspected before dispatch.\n\nSubstance: %s\nPack: %s\nStrength: %s\n\nOrders placed before 4pm UTC ship the same business day with discreet packaging and tracking.",
@@ -162,9 +213,9 @@ foreach ($productsData as $product) {
             $product['strength'] ?: null,
             $product['short_description'] ?: null,
             $description,
-            $product['price'],
+            $price,
             $oldPrice,
-            max(0, (int) $product['stock']),
+            $stock,
             $product['image'] ?: null,
             $product['ribbon'] ?: null,
             $product['shipping_location'] ?: 'both',
@@ -265,6 +316,15 @@ Database::insert(
 
 // ---------------------------------------------------------------- coupons
 $coupons = [
+    // The promo code that unlocks the bulk discount and free delivery.
+    [
+        strtoupper((string) config('app.promo_code')),
+        'fixed',
+        (float) config('app.bulk_discount_amount'),
+        (float) config('app.bulk_discount_threshold'),
+        null,
+        null,
+    ],
     ['WELCOME10', 'percent', 10, 0, null, null],
     ['CRYPTO15', 'percent', 15, 150, date('Y-m-d', strtotime('+90 days')), 500],
     ['FREESHIP25', 'fixed', 25, 200, null, null],
@@ -293,8 +353,8 @@ foreach ($reviewProducts as $index => $product) {
 
 // ---------------------------------------------------------------- demo orders
 $orders = [
-    ['paid', 'shipped', 1],
-    ['pending', 'pending', 2],
+    ['paid', 'paid', 1],
+    ['pending_payment', 'pending_payment', 2],
     ['completed', 'completed', 3],
 ];
 $customerId = (int) Database::value('SELECT id FROM users WHERE email = ?', ['customer@example.com']);
@@ -303,14 +363,20 @@ $demoProducts = Database::all('SELECT * FROM products ORDER BY id LIMIT 3');
 foreach ($orders as $index => [$status, $status2, $qty]) {
     $product = $demoProducts[$index % count($demoProducts)];
     $subtotal = (float) $product['price'] * $qty;
-    $shipping = $subtotal >= 399 ? 0.0 : 25.0;
+    $shipping = $subtotal >= (float) config('app.free_shipping_threshold')
+        ? 0.0
+        : (float) config('app.shipping_international_rate');
     $number = 'RS-DEMO-' . ($index + 1);
+
+    $number = 'RS-DEMO-' . ($index + 1);
+
+    $createdAt = date('Y-m-d H:i:s', strtotime('-' . ($index + 1) . ' days'));
 
     $orderId = Database::insert(
         'INSERT INTO orders (order_number, user_id, email, status, subtotal, discount, shipping_total, total,
             payment_method, shipping_name, shipping_phone, shipping_address, shipping_city, shipping_state,
             shipping_postal, shipping_country, created_at)
-         VALUES (?, ?, ?, ?, ?, 0, ?, ?, "crypto", ?, ?, ?, ?, ?, ?, ?, ?)',
+         VALUES (?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
         [
             $number,
             $customerId,
@@ -319,6 +385,7 @@ foreach ($orders as $index => [$status, $status2, $qty]) {
             $subtotal,
             $shipping,
             $subtotal + $shipping,
+            'bitcoin',
             'Demo Customer',
             '+1 555 0199',
             '1200 Ocean Drive',
@@ -326,9 +393,21 @@ foreach ($orders as $index => [$status, $status2, $qty]) {
             'FL',
             '33139',
             'United States',
-            date('Y-m-d H:i:s', strtotime('-' . ($index + 1) . ' days')),
+            $createdAt,
         ]
     );
+
+    if ($status2 === 'pending_payment') {
+        // A reserved, unique address/amount/network per order so the verifier can
+        // match a transfer back to this order on-chain.
+        $paymentAddress = 'bc1q' . bin2hex(random_bytes(20));
+        $paymentExpires = gmdate('Y-m-d H:i:s', strtotime('+15 minutes', strtotime($createdAt)));
+        Database::run(
+            'UPDATE orders SET payment_address = ?, payment_amount_sat = ?, payment_network = ?, payment_token = ?, payment_expires_at = ? WHERE id = ?',
+            [$paymentAddress, Payment::generateAmountSat($subtotal + $shipping, config('payments.btc.usd_rate', '60000')), 'bitcoin', 'Bitcoin', $paymentExpires, $orderId]
+        );
+    }
+
 
     Database::run(
         'INSERT INTO order_items (order_id, product_id, name, sku, unit_price, qty, total) VALUES (?, ?, ?, ?, ?, ?, ?)',

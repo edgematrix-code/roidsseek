@@ -6,6 +6,11 @@ namespace App\Support;
 
 class Cart
 {
+    /** Cheaper delivery service, used unless the customer picks domestic. */
+    public const SERVICE_INTERNATIONAL = 'international';
+    /** US delivery: 20% more than international. */
+    public const SERVICE_DOMESTIC = 'domestic';
+
     private static ?array $rows = null;
 
     /** @return array<int,int> product_id => qty */
@@ -25,17 +30,20 @@ class Cart
 
     public static function add(int $productId, int $qty = 1): bool
     {
-        $product = Database::one('SELECT id, stock, is_active FROM products WHERE id = ?', [$productId]);
+        $product = Database::one('SELECT id, price, is_active FROM products WHERE id = ?', [$productId]);
         if ($product === null || (int) $product['is_active'] !== 1) {
+            return false;
+        }
+
+        // Unpriced or below-minimum products cannot be ordered. Stock is not a
+        // gate: every priced product is always available to buy.
+        if ((float) $product['price'] < min_product_price()) {
             return false;
         }
 
         $qty = max(1, $qty);
         $current = self::raw()[$productId] ?? 0;
         $newQty = $current + $qty;
-        if ((int) $product['stock'] > 0) {
-            $newQty = min($newQty, (int) $product['stock']);
-        }
 
         $_SESSION['cart'][$productId] = $newQty;
         self::$rows = null;
@@ -54,8 +62,7 @@ class Cart
             return;
         }
 
-        $stock = (int) Database::value('SELECT stock FROM products WHERE id = ?', [$productId]);
-        $_SESSION['cart'][$productId] = $stock > 0 ? min($qty, $stock) : $qty;
+        $_SESSION['cart'][$productId] = $qty;
         self::$rows = null;
     }
 
@@ -95,7 +102,15 @@ class Cart
 
         $ids = array_keys($raw);
         $placeholders = implode(',', array_fill(0, count($ids), '?'));
-        $products = Database::all("SELECT * FROM products WHERE id IN ($placeholders)", $ids);
+        // The brand is joined in because products.manufacturer is optional free
+        // text: most rows only carry a brand, and the cart modal shows whichever
+        // of the two is available as the manufacturer.
+        $products = Database::all(
+            "SELECT p.*, b.name AS brand_name, b.slug AS brand_slug
+             FROM products p LEFT JOIN brands b ON b.id = p.brand_id
+             WHERE p.id IN ($placeholders)",
+            $ids
+        );
 
         $rows = [];
         foreach ($products as $product) {
@@ -165,8 +180,21 @@ class Cart
             return null;
         }
 
-        $coupon = Database::one('SELECT * FROM coupons WHERE code = ? AND is_active = 1', [$code]);
-        if ($coupon === null) {
+        $coupon = Database::one('SELECT * FROM coupons WHERE UPPER(code) = UPPER(?) AND is_active = 1', [$code]);
+
+        // Re-validate on every read: a coupon that expired, hit its usage limit
+        // or no longer meets the basket minimum must stop discounting at once
+        // (including when items are removed after the code was applied).
+        $expired = $coupon !== null
+            && $coupon['expires_at'] !== null
+            && $coupon['expires_at'] < date('Y-m-d');
+        $exhausted = $coupon !== null
+            && $coupon['usage_limit'] !== null
+            && (int) $coupon['used_count'] >= (int) $coupon['usage_limit'];
+        $belowMinimum = $coupon !== null
+            && self::subtotal() < (float) $coupon['min_subtotal'];
+
+        if ($coupon === null || $expired || $exhausted || $belowMinimum) {
             self::removeCoupon();
             return null;
         }
@@ -174,6 +202,47 @@ class Cart
         return $coupon;
     }
 
+    /** Minimum merchandise value (subtotal) required to place an order. */
+    public static function minimumOrder(): float
+    {
+        return (float) config('app.min_order_total');
+    }
+
+    /** True once the basket subtotal reaches the minimum order value. */
+    public static function meetsMinimumOrder(): bool
+    {
+        return self::subtotal() >= self::minimumOrder();
+    }
+
+    /** How much more the customer has to add to reach the minimum order. */
+    public static function minimumOrderShortfall(): float
+    {
+        return round(max(0, self::minimumOrder() - self::subtotal()), 2);
+    }
+
+    /**
+     * Promo code that unlocks the bulk discount and free delivery.
+     *
+     * The offer itself lives in the `coupons` table (fixed amount, minimum
+     * subtotal), so an administrator can change it without a deploy; this code
+     * only decides whether the free-delivery perk is active.
+     */
+    public static function promoCode(): string
+    {
+        return strtoupper(trim((string) config('app.promo_code')));
+    }
+
+    /** True when the applied coupon is the configured promo code. */
+    public static function promoApplied(): bool
+    {
+        $coupon = self::coupon();
+
+        return $coupon !== null
+            && self::promoCode() !== ''
+            && strtoupper((string) $coupon['code']) === self::promoCode();
+    }
+
+    /** Discount from the applied coupon, capped at the subtotal. */
     public static function discount(): float
     {
         $coupon = self::coupon();
@@ -189,22 +258,84 @@ class Cart
         return round(min($discount, $subtotal), 2);
     }
 
-    public static function shipping(): float
+    /**
+     * Delivery cost for the basket.
+     *
+     * International is the cheaper service; US domestic costs 20% more. Until
+     * the customer reaches checkout the service they picked in the cart modal
+     * decides; once a shipping country is known that country wins, so a US
+     * address is always charged the domestic rate.
+     */
+    public static function shipping(string $country = ''): float
     {
         if (self::isEmpty()) {
             return 0.0;
         }
 
-        $afterDiscount = self::subtotal() - self::discount();
-        if ($afterDiscount >= (float) config('app.free_shipping_threshold')) {
+        if (self::qualifiesForFreeShipping()) {
             return 0.0;
         }
 
-        return (float) config('app.shipping_flat_rate');
+        $domestic = $country !== ''
+            ? self::isDomestic($country)
+            : self::shippingService() === self::SERVICE_DOMESTIC;
+
+        return $domestic
+            ? (float) config('app.shipping_domestic_rate')
+            : (float) config('app.shipping_international_rate');
     }
 
-    public static function total(): float
+    /** Delivery service chosen in the cart modal; international by default. */
+    public static function shippingService(): string
     {
-        return round(max(0, self::subtotal() - self::discount() + self::shipping()), 2);
+        return ($_SESSION['shipping_service'] ?? '') === self::SERVICE_DOMESTIC
+            ? self::SERVICE_DOMESTIC
+            : self::SERVICE_INTERNATIONAL;
+    }
+
+    public static function setShippingService(string $service): void
+    {
+        $_SESSION['shipping_service'] = trim($service) === self::SERVICE_DOMESTIC
+            ? self::SERVICE_DOMESTIC
+            : self::SERVICE_INTERNATIONAL;
+    }
+
+    /** @return array{international:float,domestic:float,threshold:float} */
+    public static function shippingRates(): array
+    {
+        return [
+            'international' => (float) config('app.shipping_international_rate'),
+            'domestic' => (float) config('app.shipping_domestic_rate'),
+            'threshold' => (float) config('app.free_shipping_threshold'),
+        ];
+    }
+
+    /** True once the basket qualifies for free delivery. */
+    public static function hasFreeShipping(): bool
+    {
+        return self::qualifiesForFreeShipping();
+    }
+
+    /**
+     * Free delivery is part of the promo offer: it is granted only while the
+     * promo code is applied (which itself requires the offer's minimum basket).
+     */
+    public static function qualifiesForFreeShipping(): bool
+    {
+        return !self::isEmpty() && self::promoApplied();
+    }
+
+    /** True when a free-text country means the United States. */
+    public static function isDomestic(string $country): bool
+    {
+        $value = strtolower(trim(preg_replace('/\s+/', ' ', $country) ?? ''));
+        $value = rtrim($value, '.');
+
+        return in_array($value, ['us', 'u.s', 'usa', 'u.s.a', 'united states', 'united states of america'], true);
+    }
+
+    public static function total(string $country = ''): float
+    {
+        return round(max(0, self::subtotal() - self::discount() + self::shipping($country)), 2);
     }
 }

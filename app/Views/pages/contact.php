@@ -40,21 +40,21 @@
                         <div class="form-grid">
                             <div class="form-group">
                                 <label for="name" class="required">Your name</label>
-                                <input class="form-control" id="name" type="text" name="name" required value="<?= e(old('name', user()['name'] ?? '')) ?>">
+                                <input class="form-control" id="name" type="text" name="name" required value="">
                                 <?php if (!empty($errors['name'])): ?><div class="field-error"><?= e($errors['name']) ?></div><?php endif; ?>
                             </div>
                             <div class="form-group">
                                 <label for="email" class="required">Email</label>
-                                <input class="form-control" id="email" type="email" name="email" required value="<?= e(old('email', user()['email'] ?? '')) ?>">
+                                <input class="form-control" id="email" type="email" name="email" required value="">
                                 <?php if (!empty($errors['email'])): ?><div class="field-error"><?= e($errors['email']) ?></div><?php endif; ?>
                             </div>
                             <div class="form-group full">
                                 <label for="subject">Subject</label>
-                                <input class="form-control" id="subject" type="text" name="subject" value="<?= e(old('subject', $_GET['subject'] ?? '')) ?>">
+                                <input class="form-control" id="subject" type="text" name="subject" value="">
                             </div>
                             <div class="form-group full">
                                 <label for="message" class="required">Message</label>
-                                <textarea class="form-control" id="message" name="message" required><?= e(old('message')) ?></textarea>
+                                <textarea class="form-control" id="message" name="message" required></textarea>
                                 <?php if (!empty($errors['message'])): ?><div class="field-error"><?= e($errors['message']) ?></div><?php endif; ?>
                             </div>
                         </div>

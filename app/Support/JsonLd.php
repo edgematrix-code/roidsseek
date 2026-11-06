@@ -34,10 +34,6 @@ final class JsonLd
                 'url' => Site::absolute($logo),
             ];
         }
-        $email = (string) Site::get('email', '');
-        if (Site::filled($email)) {
-            $organization['email'] = $email;
-        }
         $phone = (string) Site::get('phone', '');
         if (Site::filled($phone)) {
             $organization['telephone'] = $phone;
@@ -56,16 +52,29 @@ final class JsonLd
         return array_filter($organization, static fn ($value) => $value !== '' && $value !== []);
     }
 
-    /** @param string $canonical Absolute canonical URL of the current page. */
-    public static function website(string $canonical): array
+    /**
+     * WebSite node. Emitted on the homepage only, so the site name Google
+     * reads has exactly one source and no competing copies.
+     *
+     * `url` is the preferred homepage URL including the trailing slash, and
+     * `alternateName` carries the bare domain (roidsseek.io for
+     * www.roidsseek.io) so Google can tie the name to the address it shows.
+     */
+    public static function website(): array
     {
         $website = [
             '@type' => 'WebSite',
             '@id' => Site::absolute('#website'),
-            'url' => Site::siteUrl(),
+            'url' => Site::absolute(''),
             'name' => Site::name(),
             'inLanguage' => Site::htmlLang(),
         ];
+
+        $host = (string) parse_url(Site::siteUrl(), PHP_URL_HOST);
+        $bare = (string) preg_replace('/^www\./i', '', $host);
+        if ($bare !== '' && strcasecmp($bare, $host) !== 0) {
+            $website['alternateName'] = [$bare];
+        }
 
         $searchPath = Site::routePath('search');
         $target = Site::absolute($searchPath)
@@ -116,10 +125,6 @@ final class JsonLd
         if (Site::filled($logo)) {
             $pharmacy['image'] = Site::absolute($logo);
         }
-        $email = (string) Site::get('email', '');
-        if (Site::filled($email)) {
-            $pharmacy['email'] = $email;
-        }
         $lat = (string) (Site::get('geo', [])['lat'] ?? '');
         $lng = (string) (Site::get('geo', [])['lng'] ?? '');
         if (Site::filled($lat) && Site::filled($lng) && is_numeric($lat) && is_numeric($lng)) {
@@ -166,7 +171,9 @@ final class JsonLd
      */
     public static function product(array $product, array $categories = []): ?array
     {
-        if (!empty($product['is_restricted']) || !empty($product['discontinued'])) {
+        // Restricted, discontinued and unpriced products have no purchasable
+        // offer, so they get no Product markup either.
+        if (!empty($product['is_restricted']) || !empty($product['discontinued']) || (float) ($product['price'] ?? 0) <= 0) {
             return null;
         }
 
@@ -250,7 +257,7 @@ final class JsonLd
      */
     private static function offer(array $product, string $currency): array
     {
-        $available = (int) ($product['stock'] ?? 0) > 0;
+        $available = \product_available($product);
         $url = Site::absoluteRoute('product', ['slug' => (string) $product['slug']]);
 
         $offer = [

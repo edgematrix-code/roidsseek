@@ -38,11 +38,11 @@ def csrf(html):
 
 
 def get(s, route, **kw):
-    return s.get(BASE, params={"r": route, **kw}, timeout=30)
+    return s.get(BASE, params={"p": route, **kw}, timeout=30)
 
 
 def post(s, route, data, **kw):
-    return s.post(BASE, params={"r": route, **kw}, data=data, timeout=30)
+    return s.post(BASE, params={"p": route, **kw}, data=data, timeout=30)
 
 
 s = requests.Session()
@@ -69,8 +69,8 @@ r = post(s, "checkout", {
     "shipping_state": "TX", "shipping_postal": "73301", "shipping_country": "USA",
     "notes": "", "payment_method": "bank_transfer",
 })
-m = re.search(r"number=([A-Za-z0-9\-]+)", r.url)
-check("checkout redirect to order", bool(m), (r.url, r.text[:200]))
+m = re.search(r"orderId=(RS-[A-Za-z0-9\-]+)", r.url)
+check("checkout redirects to payment", bool(m), (r.url, r.text[:200]))
 if m:
     num = m.group(1)
     r = get(s, "account/orders")

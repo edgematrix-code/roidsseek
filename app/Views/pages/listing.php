@@ -79,8 +79,8 @@ $hasFilters = $filters['brand'] !== [] || $filters['substance'] !== [] || $filte
                             <div class="col-8 d-flex align-items-center justify-content-end flex-nowrap text-nowrap text-right">
                                 <div class="box-sort filter-group">
                                     Sorted By:
-                                    <form method="get" action="index.php">
-                                        <input type="hidden" name="r" value="<?= e($route) ?>">
+                                    <form method="get" action="<?= e(url()) ?>">
+                                        <input type="hidden" name="<?= e(route_param()) ?>" value="<?= e($route) ?>">
                                         <?php foreach ($routeParams as $key => $value): ?>
                                             <input type="hidden" name="<?= e($key) ?>" value="<?= e($value) ?>">
                                         <?php endforeach; ?>
@@ -150,8 +150,8 @@ $hasFilters = $filters['brand'] !== [] || $filters['substance'] !== [] || $filte
 
                 <li class="filter-group js-manufacturers">
                     <span class="collapse-icons facet-title">Manufacturers</span>
-                    <form class="js-auto-filter" method="get" action="index.php">
-                        <input type="hidden" name="r" value="<?= e($route) ?>">
+                    <form class="js-auto-filter" method="get" action="<?= e(url()) ?>">
+                        <input type="hidden" name="<?= e(route_param()) ?>" value="<?= e($route) ?>">
                         <?php foreach ($routeParams as $key => $value): ?>
                             <input type="hidden" name="<?= e($key) ?>" value="<?= e($value) ?>">
                         <?php endforeach; ?>
@@ -184,8 +184,8 @@ $hasFilters = $filters['brand'] !== [] || $filters['substance'] !== [] || $filte
                 <?php if ($substances !== []): ?>
                     <li class="filter-group js-brands">
                         <span class="collapse-icons facet-title">Substance</span>
-                        <form class="js-auto-filter" method="get" action="index.php">
-                            <input type="hidden" name="r" value="<?= e($route) ?>">
+                        <form class="js-auto-filter" method="get" action="<?= e(url()) ?>">
+                            <input type="hidden" name="<?= e(route_param()) ?>" value="<?= e($route) ?>">
                             <?php foreach ($routeParams as $key => $value): ?>
                                 <input type="hidden" name="<?= e($key) ?>" value="<?= e($value) ?>">
                             <?php endforeach; ?>
@@ -216,8 +216,8 @@ $hasFilters = $filters['brand'] !== [] || $filters['substance'] !== [] || $filte
 
                 <li class="filter-group js-shipping">
                     <span class="collapse-icons facet-title">Shipping Location</span>
-                    <form class="js-auto-filter" method="get" action="index.php">
-                        <input type="hidden" name="r" value="<?= e($route) ?>">
+                    <form class="js-auto-filter" method="get" action="<?= e(url()) ?>">
+                        <input type="hidden" name="<?= e(route_param()) ?>" value="<?= e($route) ?>">
                         <?php foreach ($routeParams as $key => $value): ?>
                             <input type="hidden" name="<?= e($key) ?>" value="<?= e($value) ?>">
                         <?php endforeach; ?>

@@ -9,10 +9,11 @@ $flashError = flash('error');
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="robots" content="noindex,nofollow">
     <title><?= e($title) ?></title>
-    <link rel="stylesheet" href="assets/css/theme.css">
-    <link rel="stylesheet" href="assets/css/site.css">
-    <link rel="stylesheet" href="assets/css/compat.css">
+    <link rel="stylesheet" href="<?= e(asset('css/theme.css')) ?>">
+    <link rel="stylesheet" href="<?= e(asset('css/site.css')) ?>">
+    <link rel="stylesheet" href="<?= e(asset('css/compat.css')) ?>">
 </head>
 <body>
 <div class="admin-shell">

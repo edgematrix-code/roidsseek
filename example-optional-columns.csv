@@ -1,0 +1,4 @@
+url,removal_method,url_type
+https://example.com/a-page,remove-url,url-only
+https://example.com/blog/,remove-url,prefix
+https://example.com/,clear-cached,url-only

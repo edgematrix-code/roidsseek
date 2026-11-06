@@ -7,6 +7,9 @@ namespace App\Controllers;
 use App\Support\Auth;
 use App\Support\Cart;
 use App\Support\Database;
+use App\Support\Payment;
+use App\Support\PaymentAccess;
+use App\Support\PaymentMethod;
 use App\Support\View;
 use Throwable;
 
@@ -19,14 +22,21 @@ class CheckoutController
             redirect('cart');
         }
 
+        // Price the basket for the country already entered (after a validation
+        // error) so the summary reflects the same delivery rate the order will
+        // be charged.
+        $country = (string) input('shipping_country', '');
+
         View::render('pages/checkout', [
             'title' => 'Checkout - RoidsSeek',
             'items' => Cart::items(),
             'subtotal' => Cart::subtotal(),
             'discount' => Cart::discount(),
-            'shipping' => Cart::shipping(),
-            'total' => Cart::total(),
+            'shipping' => Cart::shipping($country),
+            'total' => Cart::total($country),
             'coupon' => Cart::coupon(),
+            'freeShipping' => Cart::qualifiesForFreeShipping(),
+            'shippingRates' => Cart::shippingRates(),
             'errors' => [],
         ]);
     }
@@ -43,6 +53,21 @@ class CheckoutController
             redirect('cart');
         }
 
+        // The promo form on the cart and checkout pages posts here. Apply the
+        // code before validating the address so the customer sees the discount
+        // reflected in the order summary instead of losing the code.
+        if (isset($_POST['apply_discount'])) {
+            [$ok, $message] = Cart::applyCoupon((string) input('code', ''));
+            flash($ok ? 'success' : 'error', $message);
+            remember_old($_POST);
+            redirect('checkout');
+        }
+
+        // Legacy values (crypto/bank_transfer/cash) still complete in-flight
+        // forms but are recorded as Bitcoin, as before.
+        $rawPayment = (string) input('payment_method', PaymentMethod::BITCOIN);
+        $legacyPayment = in_array($rawPayment, ['crypto', 'bank_transfer', 'cash'], true);
+
         $data = [
             'email' => strtolower(trim((string) input('email', ''))),
             'name' => trim((string) input('shipping_name', '')),
@@ -52,12 +77,11 @@ class CheckoutController
             'state' => trim((string) input('shipping_state', '')),
             'postal' => trim((string) input('shipping_postal', '')),
             'country' => trim((string) input('shipping_country', '')),
-            // Bitcoin is the only method offered. Legacy values are accepted
-            // so in-flight forms from before the switch still complete, but the
-            // order is always recorded as Bitcoin.
-            'payment' => 'bitcoin',
+            'payment' => $legacyPayment ? PaymentMethod::BITCOIN : PaymentMethod::normalise($rawPayment),
             'notes' => trim((string) input('notes', '')),
         ];
+
+        $method = PaymentMethod::get($data['payment']);
 
         $errors = [];
         if (!filter_var($data['email'], FILTER_VALIDATE_EMAIL)) {
@@ -72,32 +96,58 @@ class CheckoutController
         if ($data['country'] === '') {
             $errors['shipping_country'] = 'Enter a country.';
         }
-        if (!in_array((string) input('payment_method', 'bitcoin'), ['bitcoin', 'crypto', 'bank_transfer', 'cash'], true)) {
-            $errors['payment_method'] = 'Bitcoin is the only available payment method.';
+        if (!PaymentMethod::isValid($rawPayment) && !$legacyPayment) {
+            $errors['payment_method'] = 'Choose a valid payment method.';
         }
 
         if ($errors !== []) {
-            remember_old($_POST);
-            View::render('pages/checkout', [
-                'title' => 'Checkout - RoidsSeek',
-                'items' => Cart::items(),
-                'subtotal' => Cart::subtotal(),
-                'discount' => Cart::discount(),
-                'shipping' => Cart::shipping(),
-                'total' => Cart::total(),
-                'coupon' => Cart::coupon(),
-                'errors' => $errors,
-            ]);
+            $this->showCheckoutWithErrors($errors);
             return;
+        }
+
+        if (!Cart::meetsMinimumOrder()) {
+            flash('error', sprintf(
+                'Your order must be at least %s. Add %s more to check out.',
+                money(Cart::minimumOrder()),
+                money(Cart::minimumOrderShortfall())
+            ));
+            remember_old($_POST);
+            redirect('checkout');
         }
 
         $items = Cart::items();
         $subtotal = Cart::subtotal();
         $discount = Cart::discount();
-        $shipping = Cart::shipping();
-        $total = Cart::total();
+        // The entered country decides the delivery service: a US address is
+        // always charged the domestic rate, and the promo code removes it.
+        $shipping = Cart::shipping($data['country']);
+        $total = Cart::total($data['country']);
         $coupon = Cart::coupon();
+
+        // Re-check the live price and active flag at placement time, not only
+        // when the item was added. Every priced product stays sellable, so the
+        // stock counter is not a gate here.
+        foreach ($items as $row) {
+            $fresh = Database::one(
+                'SELECT price, is_active FROM products WHERE id = ?',
+                [(int) $row['product']['id']]
+            );
+            if ($fresh === null
+                || (int) $fresh['is_active'] !== 1
+                || (float) $fresh['price'] < min_product_price()) {
+                flash('error', 'Some items are no longer available. Please review your cart.');
+                redirect('cart');
+            }
+        }
+
         $orderNumber = 'RS-' . date('ymd') . '-' . strtoupper(bin2hex(random_bytes(3)));
+        $windowMinutes = max(1, (int) config('payments.window_minutes', 15));
+        $paymentExpiresAt = gmdate('Y-m-d H:i:s', time() + ($windowMinutes * 60));
+        $paymentAddress = trim((string) $method['address']);
+        $rate = (float) $method['usd_rate'];
+        $amountSat = $method['key'] === PaymentMethod::BITCOIN
+            ? Payment::generateAmountSat($total, $rate > 0 ? (string) $rate : '')
+            : 0;
 
         $pdo = Database::pdo();
         try {
@@ -105,20 +155,26 @@ class CheckoutController
 
             $orderId = Database::insert(
                 'INSERT INTO orders (order_number, user_id, email, status, subtotal, discount, shipping_total, total,
-                    coupon_code, payment_method, shipping_name, shipping_phone, shipping_address, shipping_city,
+                    coupon_code, payment_method, payment_address, payment_amount_sat, payment_network, payment_token,
+                    payment_expires_at, shipping_name, shipping_phone, shipping_address, shipping_city,
                     shipping_state, shipping_postal, shipping_country, notes)
-                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
                 [
                     $orderNumber,
                     Auth::id(),
                     $data['email'],
-                    'pending',
+                    'pending_payment',
                     $subtotal,
                     $discount,
                     $shipping,
                     $total,
                     $coupon['code'] ?? null,
-                    $data['payment'],
+                    $method['key'],
+                    $paymentAddress !== '' ? $paymentAddress : null,
+                    $amountSat,
+                    (string) $method['network'],
+                    (string) $method['token'],
+                    $paymentExpiresAt,
                     $data['name'],
                     $data['phone'],
                     $data['address'],
@@ -139,7 +195,7 @@ class CheckoutController
                 );
 
                 Database::run(
-                    'UPDATE products SET stock = GREATEST(stock - ?, 0) WHERE id = ?',
+                    'UPDATE products SET stock = GREATEST(0, stock - ?) WHERE id = ?',
                     [$row['qty'], $product['id']]
                 );
             }
@@ -161,7 +217,39 @@ class CheckoutController
         unset($_SESSION['_old']);
         $_SESSION['last_order'] = $orderNumber;
 
-        redirect('order', ['number' => $orderNumber]);
+        // Send the customer straight to the payment page, where the address,
+        // amount and countdown for the chosen coin are shown.
+        $guestToken = PaymentAccess::signGuestToken(
+            $orderId,
+            $data['email'],
+            max(1, (int) config('payments.guest_ttl_minutes', 1440))
+        );
+        $params = ['orderId' => $orderNumber];
+        if ($guestToken !== '') {
+            $params['token'] = $guestToken;
+        }
+
+        redirect('checkout/payment', $params);
+    }
+
+    /** Re-render checkout after a validation error, keeping the entered values. */
+    private function showCheckoutWithErrors(array $errors): void
+    {
+        remember_old($_POST);
+        $country = (string) input('shipping_country', '');
+
+        View::render('pages/checkout', [
+            'title' => 'Checkout - RoidsSeek',
+            'items' => Cart::items(),
+            'subtotal' => Cart::subtotal(),
+            'discount' => Cart::discount(),
+            'shipping' => Cart::shipping($country),
+            'total' => Cart::total($country),
+            'coupon' => Cart::coupon(),
+            'freeShipping' => Cart::qualifiesForFreeShipping(),
+            'shippingRates' => Cart::shippingRates(),
+            'errors' => $errors,
+        ]);
     }
 
     public function confirmation(string $number): void

@@ -176,7 +176,7 @@ CREATE TABLE orders (
     order_number     VARCHAR(32) NOT NULL,
     user_id          INT UNSIGNED NULL,
     email            VARCHAR(190) NOT NULL,
-    status           ENUM('pending','paid','shipped','completed','cancelled') NOT NULL DEFAULT 'pending',
+    status           ENUM('pending_payment','processing','payment_submitted','paid','failed','expired','pending','shipped','completed','cancelled') NOT NULL DEFAULT 'pending_payment',
     subtotal         DECIMAL(10,2) NOT NULL DEFAULT 0.00,
     discount         DECIMAL(10,2) NOT NULL DEFAULT 0.00,
     shipping_total   DECIMAL(10,2) NOT NULL DEFAULT 0.00,
@@ -190,6 +190,16 @@ CREATE TABLE orders (
     shipping_state   VARCHAR(120) NULL,
     shipping_postal  VARCHAR(40) NULL,
     shipping_country VARCHAR(120) NULL,
+    payment_address          VARCHAR(255) NULL,
+    payment_amount_sat       BIGINT UNSIGNED NOT NULL DEFAULT 0,
+    payment_network          VARCHAR(40) NOT NULL DEFAULT 'bitcoin',
+    payment_token            VARCHAR(120) NOT NULL DEFAULT 'Bitcoin (BTC)',
+    payment_tx               VARCHAR(100) NULL,
+    payment_submitted_at     DATETIME NULL,
+    payment_expires_at       DATETIME NULL,
+    payment_verified_at      DATETIME NULL,
+    payment_overpaid_sat     BIGINT UNSIGNED NOT NULL DEFAULT 0,
+    admin_read_at            DATETIME NULL,
     notes            TEXT NULL,
     created_at       DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at       DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
@@ -197,6 +207,46 @@ CREATE TABLE orders (
     UNIQUE KEY orders_number_unique (order_number),
     KEY orders_user_index (user_id),
     CONSTRAINT orders_user_fk FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- ------------------------------------------------------------------ payment
+-- Every status change is written to payment_log with a timestamp and actor.
+-- A unique address, amount and network are reserved per order so payments can
+-- be matched to orders on-chain.
+
+CREATE TABLE payment_log (
+    id              INT UNSIGNED NOT NULL AUTO_INCREMENT,
+    order_id        INT UNSIGNED NOT NULL,
+    from_status     VARCHAR(40) NOT NULL,
+    to_status       VARCHAR(40) NOT NULL,
+    actor           VARCHAR(40) NOT NULL,
+    reason          VARCHAR(190) NULL,
+    created_at      DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (id),
+    KEY payment_log_order_index (order_id),
+    CONSTRAINT payment_log_order_fk FOREIGN KEY (order_id) REFERENCES orders (id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE payment_emails (
+    id         INT UNSIGNED NOT NULL AUTO_INCREMENT,
+    order_id   INT UNSIGNED NULL,
+    recipient  VARCHAR(190) NOT NULL,
+    subject    VARCHAR(255) NOT NULL,
+    status     ENUM('sent', 'failed') NOT NULL DEFAULT 'sent',
+    error      TEXT NULL,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (id),
+    KEY payment_emails_order_index (order_id),
+    CONSTRAINT payment_emails_order_fk FOREIGN KEY (order_id) REFERENCES orders (id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE rate_limiter (
+    id          INT UNSIGNED NOT NULL AUTO_INCREMENT,
+    `key`       VARCHAR(190) NOT NULL,
+    value       INT NOT NULL DEFAULT 0,
+    expires_at  DATETIME NOT NULL,
+    PRIMARY KEY (id),
+    UNIQUE KEY rate_limiter_key_unique (`key`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 CREATE TABLE order_items (
@@ -223,6 +273,7 @@ CREATE TABLE reviews (
     title      VARCHAR(190) NULL,
     body       TEXT NOT NULL,
     status     ENUM('pending','approved','rejected') NOT NULL DEFAULT 'pending',
+    admin_read_at DATETIME NULL,
     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     PRIMARY KEY (id),
     KEY reviews_product_index (product_id, status),

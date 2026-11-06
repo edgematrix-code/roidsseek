@@ -50,7 +50,9 @@ php -S 127.0.0.1:8000 router.php
 | `SITE_ADDRESS_STREET`, `SITE_ADDRESS_POSTAL` | `address.street`, `address.postalCode` | `PostalAddress`, licence/contact blocks |
 | `SITE_GEO_LAT`, `SITE_GEO_LNG` | `geo` | `Pharmacy.geo` |
 | `SITE_PHONE`, `SITE_WHATSAPP` | `phone`, `whatsapp` | Contact page, `Organization`/`Pharmacy` telephone |
-| `SITE_EMAIL` | `email` | Contact page, structured data |
+| `SITE_EMAIL` | `email` | Support inbox: every contact-form message is forwarded here. Never printed on the site. |
+| `MAIL_HOST`, `MAIL_PORT`, `MAIL_USERNAME`, `MAIL_PASSWORD`, `MAIL_ENCRYPTION` | `mail.*` | Authenticated SMTP submission. Leave `MAIL_HOST` blank to fall back to PHP `mail()`, which shared hosts often drop. |
+| `MAIL_FROM`, `MAIL_FROM_NAME` | `mail.from`, `mail.from_name` | Sender. Must be on your own domain (default `no-reply@<bare domain>`); `www.*` fails SPF. |
 | `SITE_OPENING_HOURS` | `openingHours` | `Pharmacy.openingHours`; pipe-separated, e.g. `Mo-Fr 09:00-18:00\|Sa 10:00-14:00` |
 | `SITE_HAS_PHYSICAL_LOCATION` | `hasPhysicalLocation` | Turns the `Pharmacy` schema and address block on/off |
 | `SITE_SOCIAL_*` | `social` | `Organization.sameAs` |
@@ -64,7 +66,7 @@ php -S 127.0.0.1:8000 router.php
 | `SITE_DEFAULT_DESCRIPTION` | `defaultMetaDescription` | Home/fallback meta description |
 | `GSC_VERIFICATION` | `gscVerification` | Search Console verification meta tag |
 | `GA4_MEASUREMENT_ID` | `ga4MeasurementId` | Reserved for consent-aware analytics |
-| `SEO_CLEAN_URLS` | `cleanUrls` | Emit `/product/{slug}` URLs and 301 legacy URLs |
+| `SEO_CLEAN_URLS` | `cleanUrls` | Emit path URLs (`/shop/{slug}`, `/collections/{slug}`) and 301 legacy URLs (on by default) |
 | `SEO_CANONICAL_REDIRECT` | `canonicalRedirect` | 301 other hosts/schemes to `siteUrl` |
 | `SEO_MERCHANT_FEED` | `merchantFeed` | Enables `/feed/products.xml` |
 | `SEO_MERCHANT_COUNTRY` | `merchantCountry` | Feed target country |
@@ -110,6 +112,13 @@ cover thin copy and missing optional identifiers.
 can actually see the `noindex` directive. It blocks only `/admin`, mutation
 endpoints and faceted query parameters.
 
+While `SEO_NOINDEX=true` the table above is overridden: every page is served
+`noindex,nofollow`, and `index.php` adds `X-Robots-Tag: noindex, nofollow` to
+every response. For non-HTML files add the header at the server level —
+`.htaccess` already does it for Apache, and for nginx add
+`add_header X-Robots-Tag "noindex, nofollow" always;` to the `server` block.
+The flag is off by default, so the rules in the table apply as written.
+
 ## Sitemaps
 
 - `/sitemap.xml` — index
@@ -117,22 +126,26 @@ endpoints and faceted query parameters.
 - `/sitemap-categories.xml`, `/sitemap-brands.xml`, `/sitemap-goals.xml`
 - `/sitemap-articles.xml`, `/sitemap-pages.xml`, `/sitemap-static.xml`
 
-Only active, indexable, 200-status canonical URLs are included. `lastmod` comes
-from `products.updated_at` and `articles.published_at`.
+Only active, indexable, 200-status canonical URLs are included. In
+`/sitemap.xml` every `<lastmod>` is the day the sitemap was requested, so the
+whole site is re-read; the per-section sitemaps keep the real content dates
+(`products.updated_at`, `articles.published_at`).
 
 ## Clean URLs and canonical host
 
-Both are off by default so existing links and the regression suite keep working.
+Clean URLs are on by default (`SEO_CLEAN_URLS=true`): `/shop/{slug}`,
+`/collections/{slug}`, `/brands/{slug}`, `/goals/{slug}`, `/learn/{slug}`,
+`/info/{slug}`, `/delivery/{slug}`, `/catalogue`, `/deals`, `/help`, `/news`.
+The query form `index.php?p=product&slug=x` and the older `?r=` form both 301
+to the path form in one hop, and trailing slashes 301 to the slash-less form.
 
 ```dotenv
 SEO_CLEAN_URLS=true
 SEO_CANONICAL_REDIRECT=true
 ```
 
-With clean URLs enabled, `/index.php?r=product&slug=x` 301s to
-`/product/x` in one hop, and trailing slashes 301 to the slash-less form. The
-rewrite rules are in `.htaccess` (Apache) and `router.php` (PHP built-in server).
-For nginx add:
+The rewrite lives in `.htaccess` (Apache) and `router.php` (PHP built-in
+server). nginx needs it added by hand or every clean URL 404s:
 
 ```nginx
 location ~ /\.(?!well-known) { deny all; }

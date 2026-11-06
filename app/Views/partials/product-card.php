@@ -3,8 +3,11 @@
 $link = url('product', ['slug' => $product['slug']]);
 $brandName = $product['brand_name'] ?? '';
 $cols = $cols ?? 'col-6 col-sm-4 col-md-4 col-xl-3';
-$inStock = (int) ($product['stock'] ?? 0) > 0;
-$oldPrice = old_price_active($product) ? (float) $product['old_price'] : null;
+// Priced items with stock are sellable; rows imported without a price show as
+// unavailable instead of advertising a $0.00 product.
+$hasPrice = product_has_price($product);
+$inStock = product_available($product);
+$oldPrice = $hasPrice && old_price_active($product) ? (float) $product['old_price'] : null;
 ?>
 <div class="items-prod<?= $inStock ? '' : ' items-prod-out-of-stock' ?> <?= e($cols) ?> items-prod-col"
      data-manufacture="<?= e($brandName) ?>"
@@ -55,18 +58,20 @@ $oldPrice = old_price_active($product) ? (float) $product['old_price'] : null;
                     </div>
                 </div>
                 <div class="info-desc-right">
-                    <div class="price-info">
-                        <span class="box-price" id="offer-sale-price-<?= (int) $product['id'] ?>" data-value="<?= e((string) $product['price']) ?>" data-currency="USD">
-                            <?= money($product['price']) ?>
-                        </span>
-                        <?php if ($oldPrice !== null): ?>
-                            <small class="box-old-price" id="offer-init-price-<?= (int) $product['id'] ?>">
-                                <s><?= money($oldPrice) ?></s>
-                            </small>
-                        <?php else: ?>
-                            <small class="box-old-price" id="offer-init-price-<?= (int) $product['id'] ?>"></small>
-                        <?php endif; ?>
-                    </div>
+                    <?php if ($hasPrice): ?>
+                        <div class="price-info">
+                            <span class="box-price" id="offer-sale-price-<?= (int) $product['id'] ?>" data-value="<?= e((string) $product['price']) ?>" data-currency="USD">
+                                <?= money($product['price']) ?>
+                            </span>
+                            <?php if ($oldPrice !== null): ?>
+                                <small class="box-old-price" id="offer-init-price-<?= (int) $product['id'] ?>">
+                                    <s><?= money($oldPrice) ?></s>
+                                </small>
+                            <?php else: ?>
+                                <small class="box-old-price" id="offer-init-price-<?= (int) $product['id'] ?>"></small>
+                            <?php endif; ?>
+                        </div>
+                    <?php endif; ?>
                     <?php if ($inStock): ?>
                         <form class="f-prod-action add-cart-form" action="<?= e(url('cart/add')) ?>" method="post" id="add-to-cart-<?= (int) $product['id'] ?>">
                             <?= csrf_field() ?>
@@ -90,7 +95,7 @@ $oldPrice = old_price_active($product) ? (float) $product['old_price'] : null;
                     <?php else: ?>
                         <div class="add-cart-form-bl">
                             <div class="no-product">
-                                <em>Out of stock</em>
+                                <em>Unavailable</em>
                             </div>
                         </div>
                     <?php endif; ?>

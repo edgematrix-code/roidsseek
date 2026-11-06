@@ -1,40 +1,65 @@
 <?php
 
-/**
- * Router for the PHP built-in server:
- *
- *     php -S 127.0.0.1:8000 router.php
- *
- * Nothing secret may be fetchable over HTTP, so dotfiles (.env, .git) and the
- * application source directories are refused before the server looks at the
- * file system. Static assets are served by the built-in server; every other
- * request (clean URLs, robots.txt, sitemaps, the product feed) is handed to
- * index.php.
- */
-
 declare(strict_types=1);
 
-$path = parse_url($_SERVER['REQUEST_URI'] ?? '/', PHP_URL_PATH) ?: '/';
-$name = basename(rtrim($path, '/'));
+/**
+ * Front-controller router for PHP's built-in server.
+ *
+ *   php -S 127.0.0.1:8000 router.php
+ *
+ * Every request goes through index.php so the clean URLs (/reviews,
+ * /shop/{slug}, /robots.txt, ...) behave the same as they do under Apache.
+ * Existing static files (CSS, JS, images) are served directly; source
+ * directories, dotfiles and internal tooling are never served.
+ */
 
-$blockedDirs = '#^/(app|config|database|tools|tests|legacy)(/|$)#';
-$isDotfile = $name !== '' && str_starts_with($name, '.');
+$path = rawurldecode((string) (parse_url($_SERVER['REQUEST_URI'] ?? '/', PHP_URL_PATH) ?: '/'));
+$root = __DIR__;
 
-if ($isDotfile || preg_match($blockedDirs, $path) === 1) {
+// Never expose dotfiles (credentials, git metadata, editor config). The
+// .well-known prefix is the one exception because certificate validation needs
+// it.
+if (preg_match('#(^|/)\.(?!well-known(?:/|$))#', $path) === 1) {
     http_response_code(404);
-    header('Content-Type: text/plain; charset=utf-8');
-    echo "Not Found\n";
     return true;
 }
 
-$isSeoEndpoint = in_array($path, ['/robots.txt', '/sitemap.xml', '/feed/products.xml'], true)
-    || preg_match('#^/sitemap-[a-z]+(?:-\d+)?\.xml$#', $path) === 1;
-
-$hasExtension = pathinfo($path, PATHINFO_EXTENSION) !== '';
-
-if ($isSeoEndpoint || ($path !== '/' && !$hasExtension)) {
-    require __DIR__ . '/index.php';
+// Application sources and local tooling are not public. index.php already
+// refuses these paths, but blocking them at the router keeps the built-in
+// server from ever executing or streaming them.
+$blocked = ['app', 'config', 'database', 'tests', 'tools', 'legacy', 'tmp', 'correct-ui'];
+$firstSegment = strtolower((string) (explode('/', trim($path, '/'))[0] ?? ''));
+if ($firstSegment !== '' && in_array($firstSegment, $blocked, true)) {
+    http_response_code(404);
     return true;
 }
 
-return false;
+// /admin.php is the documented second entry point.
+if ($path === '/admin.php') {
+    $_GET['p'] = 'admin';
+    $_SERVER['SCRIPT_NAME'] = '/admin.php';
+    require $root . '/index.php';
+    return true;
+}
+
+$file = realpath($root . $path);
+$insideRoot = $file !== false && strncmp($file, realpath($root) . DIRECTORY_SEPARATOR, strlen(realpath($root) . DIRECTORY_SEPARATOR)) === 0;
+
+if ($insideRoot && is_file($file)) {
+    if (strtolower(pathinfo($file, PATHINFO_EXTENSION)) === 'php') {
+        // Only the front controllers are executable; any other PHP file is
+        // internal and must not be requested directly.
+        if (basename($file) === 'index.php') {
+            require $file;
+            return true;
+        }
+        http_response_code(404);
+        return true;
+    }
+
+    // Static asset: let the built-in server stream it.
+    return false;
+}
+
+require $root . '/index.php';
+return true;

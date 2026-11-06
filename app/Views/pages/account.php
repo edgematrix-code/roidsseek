@@ -39,20 +39,21 @@
                     <p class="muted small mt-0" style="margin-top:-8px;">Signed in as <?= e($user['email']) ?>.</p>
                     <form action="<?= e(url('account/profile')) ?>" method="post">
                         <?= csrf_field() ?>
+                        <p class="muted small">Leave a field blank to keep its current value.</p>
                         <div class="form-grid">
                             <div class="form-group">
                                 <label for="name">Full name</label>
-                                <input class="form-control" id="name" type="text" name="name" value="<?= e($user['name']) ?>" required>
+                                <input class="form-control" id="name" type="text" name="name" value="">
                                 <?php if (!empty($errors['name'])): ?><div class="field-error"><?= e($errors['name']) ?></div><?php endif; ?>
                             </div>
                             <div class="form-group">
                                 <label for="email">Email</label>
-                                <input class="form-control" id="email" type="email" name="email" value="<?= e($user['email']) ?>" required>
+                                <input class="form-control" id="email" type="email" name="email" value="">
                                 <?php if (!empty($errors['email'])): ?><div class="field-error"><?= e($errors['email']) ?></div><?php endif; ?>
                             </div>
                             <div class="form-group">
                                 <label for="phone">Phone</label>
-                                <input class="form-control" id="phone" type="text" name="phone" value="<?= e($user['phone']) ?>">
+                                <input class="form-control" id="phone" type="text" name="phone" value="">
                             </div>
                         </div>
                         <button type="submit" class="btn btn-mix btn-primary">Save changes</button>

@@ -1,8 +1,8 @@
 <div class="admin-topbar">
     <h1>Products</h1>
     <div style="display:flex;gap:10px;align-items:center;">
-        <form class="admin-search" method="get" action="index.php">
-            <input type="hidden" name="r" value="admin/products">
+        <form class="admin-search" method="get" action="<?= e(url()) ?>">
+            <input type="hidden" name="<?= e(route_param()) ?>" value="admin/products">
             <input type="text" name="q" value="<?= e($search) ?>" placeholder="Search name, SKU, slug">
             <button class="btn btn-light" type="submit">Search</button>
         </form>

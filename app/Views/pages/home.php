@@ -50,10 +50,10 @@ $supportQuotes = array_slice($reviews, 0, 3);
                     </div>
                     <div class="kit-grid kit-grid--pair">
                         <a class="kit-banner" href="<?= e(url('sale')) ?>">
-                            <img src="assets/img/discount-crypto.webp" alt="Pay with crypto, save up to 20%" width="1360" height="454" loading="lazy" decoding="async">
+                            <img src="<?= e(asset('img/discount-crypto.webp')) ?>" alt="Pay with crypto, save up to 20%" width="1360" height="454" loading="lazy" decoding="async">
                         </a>
                         <a class="kit-banner" href="<?= e(url('category', ['slug' => 'peptides-sarms'])) ?>">
-                            <img src="assets/img/peptides-discount.webp" alt="Save 40% on selected peptides" width="1360" height="454" loading="lazy" decoding="async">
+                            <img src="<?= e(asset('img/peptides-discount.webp')) ?>" alt="Save 40% on selected peptides" width="1360" height="454" loading="lazy" decoding="async">
                         </a>
                     </div>
                 </section>
@@ -150,16 +150,16 @@ $supportQuotes = array_slice($reviews, 0, 3);
                 </div>
                 <div class="kit-reviews__grid">
                     <a class="kit-review-card" href="https://www.trustpilot.com/review/roidsseek.net" target="_blank" rel="noopener">
-                        <img class="kit-review-card__logo" src="assets/img/trustpilot.svg" alt="TrustPilot Reviews">
+                        <img class="kit-review-card__logo" src="<?= e(asset('img/trustpilot.svg')) ?>" alt="TrustPilot Reviews">
                     </a>
                     <a class="kit-review-card" href="https://www.anabolicsteroidforums.com/forums/roidsseek.314/" target="_blank" rel="noopener">
-                        <img class="kit-review-card__logo" src="assets/img/asf-logo.webp" alt="AnabolicSteroidForums">
+                        <img class="kit-review-card__logo" src="<?= e(asset('img/asf-logo.webp')) ?>" alt="AnabolicSteroidForums">
                     </a>
                     <a class="kit-review-card" href="https://steroidwiki.com/sources/steroid-sources/roidsseek.com" target="_blank" rel="noopener">
-                        <img class="kit-review-card__logo" src="assets/img/steroid-wiki.webp" alt="RoidsSeek SteroidWiki Reviews">
+                        <img class="kit-review-card__logo" src="<?= e(asset('img/steroid-wiki.webp')) ?>" alt="RoidsSeek SteroidWiki Reviews">
                     </a>
                     <a class="kit-review-card" href="https://www.eroids.com/reviews/roidsseek.to" target="_blank" rel="noopener">
-                        <img class="kit-review-card__logo" src="assets/img/eroids-logo.webp" alt="RoidsSeek Eroids Reviews">
+                        <img class="kit-review-card__logo" src="<?= e(asset('img/eroids-logo.webp')) ?>" alt="RoidsSeek Eroids Reviews">
                     </a>
                 </div>
             </section>
@@ -246,7 +246,7 @@ $supportQuotes = array_slice($reviews, 0, 3);
                 <?php endif; ?>
             </ul>
             <a href="<?= e(url('all')) ?>" title="Write a Review" class="btn btn-mix btn-outline-light mr-sm-3 mt-3">Write a Review</a>
-            <a href="<?= e(url('all')) ?>" title="View Reviews" class="btn btn-mix btn-outline-light mt-3">View Reviews</a>
+            <a href="<?= e(url('reviews')) ?>" title="View Reviews" class="btn btn-mix btn-outline-light mt-3">View Reviews</a>
         </div>
     </div>
 </div>

@@ -2,13 +2,42 @@
 $avgRating = $rating && $rating['avg_rating'] !== null ? (float) $rating['avg_rating'] : 0.0;
 $reviewCount = $rating ? (int) $rating['total'] : 0;
 $primaryCategory = $categories[0] ?? null;
-$inStock = (int) $product['stock'] > 0;
+// A product needs both a price and stock to be orderable.
+$hasPrice = product_has_price($product);
+$inStock = product_available($product);
 $oldPrice = old_price_active($product) ? (float) $product['old_price'] : null;
 $rxRequired = ($product['rx_status'] ?? '') === 'rx';
 $restricted = !empty($product['is_restricted']);
 $imageAlt = trim((string) ($product['image_alt'] ?? '')) !== '' ? (string) $product['image_alt'] : (string) $product['name'];
 $editorial = (array) \App\Support\Site::get('editorial', []);
 $storeName = \App\Support\Site::name();
+
+// Delivery service toggle. International is the cheaper service and US
+// domestic costs 20% more; the choice is stored in the session so the cart
+// modal, the cart page and checkout use the same service.
+$shippingRates = \App\Support\Cart::shippingRates();
+$location = (string) ($product['shipping_location'] ?? 'both');
+$shippingOptions = [];
+if ($location !== 'usa') {
+    $shippingOptions['international'] = ['label' => 'International', 'rate' => $shippingRates['international']];
+}
+if ($location !== 'international') {
+    $shippingOptions['domestic'] = ['label' => 'U.S. Domestic', 'rate' => $shippingRates['domestic']];
+}
+if ($shippingOptions === []) {
+    $shippingOptions['international'] = ['label' => 'International', 'rate' => $shippingRates['international']];
+}
+$selectedService = \App\Support\Cart::shippingService();
+if (!isset($shippingOptions[$selectedService])) {
+    $selectedService = (string) array_key_first($shippingOptions);
+}
+$selectedOption = $shippingOptions[$selectedService];
+$freeShipping = \App\Support\Cart::hasFreeShipping();
+$deliveryFee = $freeShipping ? 0.0 : (float) $selectedOption['rate'];
+$deliveredPrice = $hasPrice ? (float) $product['price'] + $deliveryFee : 0.0;
+// The displayed price already includes the selected delivery service, so the
+// saving is measured against that price.
+$saveAmount = $oldPrice !== null ? round($oldPrice - $deliveredPrice, 2) : 0.0;
 ?>
 <div class="breadcrumb_container">
     <div class="container">
@@ -69,13 +98,15 @@ $storeName = \App\Support\Site::name();
                 </p>
             <?php endif; ?>
 
-            <div class="product-prices">
-                <span class="box-price"><?= money($product['price']) ?></span>
-                <?php if ($oldPrice !== null): ?>
-                    <span class="box-old-price"><?= money($oldPrice) ?></span>
-                    <span class="save">You save <?= money($oldPrice - (float) $product['price']) ?></span>
-                <?php endif; ?>
-            </div>
+            <?php if ($hasPrice): ?>
+                <div class="product-prices">
+                    <span class="box-price"><?= money($deliveredPrice) ?></span>
+                    <?php if ($saveAmount > 0): ?>
+                        <span class="box-old-price"><?= money($oldPrice) ?></span>
+                        <span class="save">You save <?= money($saveAmount) ?></span>
+                    <?php endif; ?>
+                </div>
+            <?php endif; ?>
 
             <table class="product-specs">
                 <?php if (!empty($product['substance'])): ?>
@@ -105,15 +136,30 @@ $storeName = \App\Support\Site::name();
                 <tr>
                     <th>Shipping</th>
                     <td>
-                        <?= $product['shipping_location'] === 'usa' ? 'USA domestic'
-                            : ($product['shipping_location'] === 'international' ? 'International' : 'USA domestic &amp; International') ?>
+                        <div class="ship-toggle" role="group" aria-label="Delivery service">
+                            <?php foreach ($shippingOptions as $key => $option): ?>
+                                <?php if (count($shippingOptions) === 1): ?>
+                                    <span class="btn btn-sm btn-primary ship-toggle__btn"><?= e($option['label']) ?></span>
+                                <?php else: ?>
+                                    <a class="btn btn-sm <?= $key === $selectedService ? 'btn-primary' : 'btn-outline-primary' ?> ship-toggle__btn"
+                                       href="<?= e(url('product', ['slug' => $product['slug'], 'ship' => $key])) ?>"
+                                       rel="nofollow"<?= $key === $selectedService ? ' aria-current="true"' : '' ?>><?= e($option['label']) ?></a>
+                                <?php endif; ?>
+                            <?php endforeach; ?>
+                        </div>
+                        <p class="ship-toggle__note">
+                            International is the cheaper service and US domestic costs 20% more.
+                            Orders of <?= money(config('app.bulk_discount_threshold')) ?> or more get
+                            <?= money(config('app.bulk_discount_amount')) ?> off and free shipping with promo code
+                            <strong><?= e(\App\Support\Cart::promoCode()) ?></strong>.
+                        </p>
                     </td>
                 </tr>
                 <tr>
                     <th>Availability</th>
                     <td>
-                        <span class="stock-pill <?= $inStock ? '' : 'out' ?>">
-                            <?= $inStock ? 'In stock (' . (int) $product['stock'] . ')' : 'Out of stock' ?>
+                        <span class="stock-pill <?= $hasPrice ? '' : 'out' ?>">
+                            <?= $hasPrice ? 'In stock' : 'Unavailable' ?>
                         </span>
                     </td>
                 </tr>
@@ -125,15 +171,15 @@ $storeName = \App\Support\Site::name();
                     <input type="hidden" name="product_id" value="<?= (int) $product['id'] ?>">
                     <div class="product-quantity">
                         <label for="qty" class="small muted">Qty</label>
-                        <input id="qty" type="number" name="qty" value="1" min="1" max="<?= (int) $product['stock'] ?>">
+                        <input id="qty" type="number" name="qty" value="1" min="1" max="<?= max(1, (int) $product['stock']) ?>">
                         <button type="submit" class="btn btn-mix btn-primary">Add to Cart</button>
                         <button type="submit" name="return_to" value="cart" class="btn btn-mix btn-outline-primary">Buy Now</button>
                     </div>
                 </form>
             <?php else: ?>
                 <p class="muted">
-                    This product is temporarily out of stock.
-                    <a href="<?= e(url('contact', ['subject' => 'Notify me: ' . $product['name']])) ?>">Ask to be notified when it returns</a>.
+                    This product is not available to order right now.
+                    <a href="<?= e(url('contact', ['subject' => 'Product availability: ' . $product['name']])) ?>">Contact us for details</a>.
                 </p>
                 <?php if ($categories !== []): ?>
                     <p class="small">
@@ -146,7 +192,9 @@ $storeName = \App\Support\Site::name();
             <?php endif; ?>
 
             <p class="small muted mt-2">
-                Free shipping on orders over <?= money(config('app.free_shipping_threshold')) ?>.
+                Orders of <?= money(config('app.bulk_discount_threshold')) ?> or more get
+                <?= money(config('app.bulk_discount_amount')) ?> off and free shipping with promo code
+                <strong><?= e(\App\Support\Cart::promoCode()) ?></strong>.
                 Discreet packaging and tracking on every order.
             </p>
         </div>

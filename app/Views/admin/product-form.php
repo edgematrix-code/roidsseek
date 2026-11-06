@@ -64,8 +64,9 @@ $val = static fn(string $key, $default = '') => e($p[$key] ?? $default);
         <h2>Pricing &amp; inventory</h2>
         <div class="form-grid">
             <div class="form-group">
-                <label for="price">Price (USD)</label>
-                <input id="price" type="number" step="0.01" min="0" name="price" value="<?= $val('price', '0.00') ?>" required>
+                <label for="price">Price (<?= e(money(min_product_price())) ?> minimum)</label>
+                <input id="price" type="number" step="0.01" min="<?= e((string) min_product_price()) ?>" name="price" value="<?= $val('price', '0.00') ?>" required>
+                <?php if (!empty($errors['price'])): ?><div class="field-error"><?= e($errors['price']) ?></div><?php endif; ?>
             </div>
             <div class="form-group">
                 <label for="old_price">Compare-at price</label>

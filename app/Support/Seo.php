@@ -22,7 +22,7 @@ final class Seo
      */
     public static function page(array $overrides = []): array
     {
-        $route = (string) ($overrides['route'] ?? ($_GET['r'] ?? ''));
+        $route = (string) ($overrides['route'] ?? ($_GET[route_param()] ?? ($_GET['r'] ?? '')));
         $params = (array) ($overrides['params'] ?? []);
         $page = (int) ($overrides['page'] ?? ($params['page'] ?? 0));
 
@@ -45,16 +45,26 @@ final class Seo
         }
 
         $robots = (string) ($overrides['robots'] ?? self::robotsFor($route));
-
-        $image = (string) ($overrides['image'] ?? '');
-        if ($image === '') {
-            $image = (string) Site::get('defaultOgImage', '');
+        // Opt-in sitewide deindex (config/site.php -> noindexSite). When it is
+        // on it is applied last so it wins over every per-page directive.
+        if ((bool) Site::get('noindexSite', false)) {
+            $robots = 'noindex,nofollow';
         }
-        if ($image === '') {
-            $image = (string) Site::get('logoPath', '');
+
+        // `image => false` opts the page out of a social image entirely.
+        $image = '';
+        if (($overrides['image'] ?? null) !== false) {
+            $image = (string) ($overrides['image'] ?? '');
+            if ($image === '') {
+                $image = (string) Site::get('defaultOgImage', '');
+            }
+            if ($image === '') {
+                $image = (string) Site::get('logoPath', '');
+            }
         }
 
         return [
+            'route' => $route,
             'title' => $title,
             'description' => $description,
             'canonical' => $canonical,
@@ -62,6 +72,13 @@ final class Seo
             'type' => (string) ($overrides['type'] ?? 'website'),
             'image' => $image !== '' ? Site::absolute($image) : '',
             'siteName' => Site::name(),
+            'ogSiteName' => trim((string) ($overrides['ogSiteName'] ?? Site::name())),
+            'twitterSite' => trim((string) ($overrides['twitterSite'] ?? '')),
+            'twitterCard' => (string) ($overrides['twitterCard'] ?? ($image !== '' ? 'summary_large_image' : 'summary')),
+            'keywords' => trim((string) ($overrides['keywords'] ?? '')),
+            'distribution' => trim((string) ($overrides['distribution'] ?? '')),
+            'classification' => trim((string) ($overrides['classification'] ?? '')),
+            'viewport' => trim((string) ($overrides['viewport'] ?? '')),
             'locale' => Site::htmlLang(),
             'product' => (array) ($overrides['product'] ?? []),
             'jsonLd' => (array) ($overrides['jsonLd'] ?? []),
@@ -141,7 +158,9 @@ final class Seo
     /** Absolute canonical for a route, including the page number when relevant. */
     public static function canonicalFor(string $route, array $params = [], int $page = 0): string
     {
-        unset($params['r']);
+        foreach (route_param_keys() as $key) {
+            unset($params[$key]);
+        }
         foreach (self::FACET_KEYS as $key) {
             unset($params[$key]);
         }

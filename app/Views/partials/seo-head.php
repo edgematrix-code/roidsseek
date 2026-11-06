@@ -17,6 +17,16 @@ $ogType = (string) ($seo['type'] ?? 'website');
 $image = (string) ($seo['image'] ?? '');
 $locale = (string) ($seo['locale'] ?? '');
 $siteName = (string) ($seo['siteName'] ?? '');
+$ogSiteName = (string) ($seo['ogSiteName'] ?? $siteName);
+$viewport = (string) ($seo['viewport'] ?? '');
+if ($viewport === '') {
+    $viewport = 'width=device-width, initial-scale=1';
+}
+$keywords = (string) ($seo['keywords'] ?? '');
+$distribution = (string) ($seo['distribution'] ?? '');
+$classification = (string) ($seo['classification'] ?? '');
+$twitterSite = (string) ($seo['twitterSite'] ?? '');
+$twitterCard = (string) ($seo['twitterCard'] ?? ($image !== '' ? 'summary_large_image' : 'summary'));
 $productMeta = (array) ($seo['product'] ?? []);
 $gsc = (string) Site::get('gscVerification', '');
 
@@ -36,10 +46,16 @@ if ($image !== '' && Site::siteUrl() !== '') {
     }
 }
 
+// Google reads the site name from the WebSite node on the homepage, so it is
+// emitted there only: one WebSite definition for the whole site.
+$isHome = (string) ($seo['route'] ?? '') === '';
+
 $graph = [];
 if ($hasSiteUrl) {
     $graph[] = JsonLd::organization();
-    $graph[] = JsonLd::website($canonical);
+    if ($isHome) {
+        $graph[] = JsonLd::website();
+    }
     $pharmacy = JsonLd::pharmacy();
     if ($pharmacy !== null) {
         $graph[] = $pharmacy;
@@ -59,8 +75,17 @@ if ($graph !== []) {
     );
 }
 ?>
-    <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta charset="UTF-8">
+    <meta name="viewport" content="<?= e($viewport) ?>">
+<?php if ($distribution !== ''): ?>
+    <meta name="distribution" content="<?= e($distribution) ?>">
+<?php endif; ?>
+<?php if ($classification !== ''): ?>
+    <meta name="classification" content="<?= e($classification) ?>">
+<?php endif; ?>
+<?php if ($keywords !== ''): ?>
+    <meta name="keywords" content="<?= e($keywords) ?>">
+<?php endif; ?>
 <?php if ($pageTitle !== ''): ?>
     <title><?= e($pageTitle) ?></title>
 <?php endif; ?>
@@ -88,8 +113,8 @@ if ($graph !== []) {
 <?php if ($pageDescription !== ''): ?>
     <meta property="og:description" content="<?= e($pageDescription) ?>">
 <?php endif; ?>
-<?php if ($siteName !== ''): ?>
-    <meta property="og:site_name" content="<?= e($siteName) ?>">
+<?php if ($ogSiteName !== ''): ?>
+    <meta property="og:site_name" content="<?= e($ogSiteName) ?>">
 <?php endif; ?>
 <?php if ($locale !== ''): ?>
     <meta property="og:locale" content="<?= e(str_replace('-', '_', $locale)) ?>">
@@ -113,7 +138,10 @@ if ($graph !== []) {
     <meta property="product:availability" content="<?= e((string) $productMeta['availability']) ?>">
 <?php endif; ?>
 <?php endif; ?>
-    <meta name="twitter:card" content="<?= $image !== '' ? 'summary_large_image' : 'summary' ?>">
+    <meta name="twitter:card" content="<?= e($twitterCard) ?>">
+<?php if ($twitterSite !== ''): ?>
+    <meta name="twitter:site" content="<?= e($twitterSite) ?>">
+<?php endif; ?>
 <?php if ($pageTitle !== ''): ?>
     <meta name="twitter:title" content="<?= e($pageTitle) ?>">
 <?php endif; ?>
